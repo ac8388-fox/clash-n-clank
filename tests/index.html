@@ -41,6 +41,7 @@
 <script type="module">
   import { runAll } from './harness.js';
   import './rules.test.js';
+  import './combat.test.js';
 
   const results = await runAll();
   const failed = results.filter(r => !r.pass);

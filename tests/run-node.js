@@ -1,6 +1,7 @@
 // Run the tests on a computer: node tests/run-node.js
 import { runAll } from './harness.js';
 import './rules.test.js';
+import './combat.test.js';
 
 const results = await runAll();
 let failed = 0;

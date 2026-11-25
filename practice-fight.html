@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Practice Fight – Clash n' Clank</title>
+<style>
+  @font-face { font-family: 'VT323'; src: url('assets/fonts/VT323-Regular.ttf') format('truetype'); font-display: swap; }
+  :root { --black: #000; --white: #fff; --blue: #5BC8F5; --red: #E5383B; --dim: #777; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--black); color: var(--white); }
+  body {
+    font-family: 'VT323', ui-monospace, Menlo, Consolas, monospace; font-size: 21px; line-height: 1.15;
+    padding: max(12px, env(safe-area-inset-top)) 14px max(20px, env(safe-area-inset-bottom));
+    max-width: 430px; margin: 0 auto;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  h1 { font-size: 28px; font-weight: normal; margin: 0; }
+  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .bar .grow { flex: 1; }
+  button, select {
+    font: inherit; color: var(--white); background: var(--black);
+    border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue); padding: 4px 10px;
+  }
+  .enemy { display: flex; align-items: baseline; gap: 10px; }
+  .enemy .name { color: var(--red); font-size: 30px; }
+  .enemy .range { opacity: .8; }
+  #star {
+    margin-left: auto; font-size: 26px; padding: 0 10px; color: var(--blue); display: none;
+    animation: glow 1s ease-in-out infinite alternate;
+  }
+  #star.show { display: inline-block; }
+  #star.armed { background: var(--blue); color: var(--black); animation: none; }
+  @keyframes glow { from { box-shadow: 3px 3px 0 var(--blue); } to { box-shadow: 0 0 12px var(--blue); } }
+  #hint { color: var(--blue); min-height: 1.15em; font-size: 19px; }
+  #caption { font-size: 24px; margin: 6px 0; }
+  #chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+  .chip { border: 1px solid var(--white); box-shadow: 2px 2px 0 var(--blue); padding: 1px 8px; font-size: 19px; }
+  .chip.none { opacity: .6; border-style: dashed; box-shadow: none; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 6px; }
+  th, td { text-align: center; padding: 1px 2px; font-weight: normal; }
+  th { opacity: .8; font-size: 18px; }
+  td.who { text-align: left; width: 26%; }
+  td.foe { color: var(--red); }
+  .low { color: var(--red); }
+  #status { font-size: 18px; opacity: .9; min-height: 2.3em; }
+  #status .cond { color: var(--red); }
+  #status .tpt { color: var(--blue); }
+
+  .diamond {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto auto auto;
+    gap: 8px; margin: 10px 0 4px; touch-action: pan-y;
+  }
+  .opt {
+    position: relative; overflow: hidden; min-height: 56px; padding: 6px 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent; touch-action: none;
+  }
+  .opt .lbl { position: relative; z-index: 1; }
+  .opt .sub { position: relative; z-index: 1; font-size: 15px; opacity: .8; }
+  .opt .fill {
+    position: absolute; left: 0; bottom: 0; height: 100%; width: 100%;
+    background: var(--blue); opacity: .45; transform: scaleX(0); transform-origin: left center;
+  }
+  .opt:disabled { opacity: .35; box-shadow: none; }
+  .opt.up { grid-column: 2; grid-row: 1; }
+  .opt.left { grid-column: 1; grid-row: 2; }
+  .opt.right { grid-column: 3; grid-row: 2; }
+  .opt.down { grid-column: 2; grid-row: 3; }
+  .center { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 17px; text-align: center; }
+  .clashing .opt { border-color: var(--red); }
+  #mode { font-size: 19px; }
+  .pager { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .pager button { padding: 2px 12px; }
+  #result { border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue); padding: 8px; min-height: 2.4em; margin: 8px 0; }
+  #result .ex { opacity: .7; font-size: 17px; }
+  #end { display: none; border: 2px solid var(--red); padding: 10px; margin: 8px 0; }
+  #end.show { display: block; }
+  #log { font-size: 17px; opacity: .8; max-height: 260px; overflow-y: auto; -webkit-user-select: text; user-select: text; }
+  #log div { padding: 1px 0; }
+  .help { font-size: 17px; opacity: .75; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <h1 class="grow">Practice Fight</h1>
+    <button id="restart" type="button">Restart</button>
+  </div>
+  <div class="bar help">
+    Human Fighter, sword and dagger. Ability:
+    <select id="ability"><option value="planB">Plan B</option><option value="crusher">Crusher</option></select>
+    <span>(applies on Restart)</span>
+  </div>
+
+  <div class="enemy">
+    <span class="name" id="ename">WEREWOLF</span><span class="range" id="erange"></span>
+    <button id="star" type="button" aria-label="Fortune opening">★</button>
+  </div>
+  <div id="hint"></div>
+  <div id="caption"></div>
+  <div id="chips"></div>
+
+  <table>
+    <thead><tr><th></th><th>STR</th><th>AGI</th><th>WIS</th><th>FAI</th></tr></thead>
+    <tbody>
+      <tr id="row-you"><td class="who">You</td><td></td><td></td><td></td><td></td></tr>
+      <tr id="row-foe"><td class="who foe">Werewolf</td><td></td><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <div id="status"></div>
+
+  <div class="diamond" id="diamond">
+    <button class="opt up" type="button" data-dir="up"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+    <button class="opt left" type="button" data-dir="left"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+    <div class="center"><div id="mode"></div></div>
+    <button class="opt right" type="button" data-dir="right"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+    <button class="opt down" type="button" data-dir="down"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+  </div>
+  <div class="pager">
+    <button id="prev" type="button">◀ Page</button>
+    <button id="back" type="button">Back</button>
+    <button id="next" type="button">Page ▶</button>
+  </div>
+
+  <div id="result"></div>
+  <div id="end"></div>
+  <p class="help">Hold a button for one second to choose. Swipe left or right for more actions; swipe down to go back. When a ★ appears, tap it, then hold an action for a lucky attempt.</p>
+  <div id="log"></div>
+
+<script type="module">
+  import { createCharacter } from './engine/state.js';
+  import { attrTotal, ATTRS, luckOf } from './engine/rules.js';
+  import { startCombat, submitAction, submitClash, availableActions, finishCombat, TARGETS } from './engine/combat.js';
+  import { getEnemy } from './data/enemies.js';
+  import { getAbility } from './data/abilities.js';
+  import { getWeapon } from './data/items.js';
+  import { TRAITS } from './data/traits.js';
+  import { newSeed } from './engine/random.js';
+  import { attachHold, attachKeyboard, attachSwipes } from './ui/hold.js';
+
+  const SAVE = 'clash-n-clank.practice';
+  const DIRS = ['up', 'right', 'down', 'left'];
+  const TARGET_OF = { up: 'head', left: 'left', right: 'right', down: 'legs' };
+  const TARGET_NAME = { head: 'Head', left: 'Left', right: 'Right', legs: 'Legs' };
+  const $ = (id) => document.getElementById(id);
+
+  let game;               // { character, combat, ability, lastLines, summary }
+  let ui = { page: 0, pending: null, armed: false };
+
+  function newGame() {
+    const ability = $('ability').value;
+    const character = createCharacter({ name: 'Practice', raceId: 'human', luckyNumber: 2, occupationId: 'knight', classAbility: ability });
+    const combat = startCombat(character, 'werewolf', { seed: newSeed() });
+    game = { character, combat, ability, lastLines: [], summary: null };
+    ui = { page: 0, pending: null, armed: false };
+    save();
+    render();
+  }
+
+  function save() { try { localStorage.setItem(SAVE, JSON.stringify(game)); } catch {} }
+  function load() {
+    try { const g = JSON.parse(localStorage.getItem(SAVE)); if (g && g.combat && g.character) return g; } catch {}
+    return null;
+  }
+
+  // ---- What each diamond button means right now ---------------------------
+  function slots() {
+    const { character, combat } = game;
+    if (combat.outcome) return {};
+    if (combat.pendingClash) {
+      const s = {};
+      for (const d of DIRS) s[d] = { label: TARGET_NAME[TARGET_OF[d]], enabled: true, run: () => doClash(TARGET_OF[d]) };
+      return s;
+    }
+    if (ui.pending) {
+      const s = {};
+      for (const d of DIRS) s[d] = { label: TARGET_NAME[TARGET_OF[d]], enabled: true, run: () => doAction({ ...ui.pending, target: TARGET_OF[d] }) };
+      return s;
+    }
+    const acts = availableActions(character, combat);
+    if (ui.page === 0) {
+      const [pray, attack, block, item] = acts.page1;
+      return {
+        up:    { label: 'Pray', sub: 'FAI', enabled: pray.enabled, run: () => doAction({ action: 'pray' }) },
+        right: { label: 'Attack', sub: acts.weapon || '', enabled: attack.enabled, run: () => { ui.pending = { action: 'attack' }; render(); } },
+        down:  { label: 'Block', sub: 'WIS', enabled: block.enabled, run: () => { ui.pending = { action: 'block' }; render(); } },
+        left:  { label: 'Item', sub: item.detail, enabled: item.enabled, run: () => doAction({ action: 'item' }) },
+      };
+    }
+    const s = {};
+    acts.abilities.slice((ui.page - 1) * 4, ui.page * 4).forEach((a, i) => {
+      const d = DIRS[i];
+      s[d] = {
+        label: a.name,
+        sub: a.cooldownLeft ? `ready in ${a.cooldownLeft}` : `${a.speed}`,
+        enabled: a.enabled,
+        run: () => { ui.pending = { action: 'ability', abilityId: a.id }; render(); },
+      };
+    });
+    return s;
+  }
+
+  function pageCount() { return 1 + Math.ceil(game.character.abilities.length / 4); }
+
+  function doAction(choice) {
+    const lucky = ui.armed && game.combat.current.fortune.open && choice.action !== 'block';
+    let r;
+    try { r = submitAction(game.character, game.combat, { ...choice, lucky }); }
+    catch (e) { game.lastLines = [e.message]; ui.pending = null; render(); return; }
+    game.character = r.character; game.combat = r.combat;
+    game.lastLines = r.lines;
+    ui.pending = null; ui.armed = false; ui.page = 0;
+    afterExchange();
+  }
+
+  function doClash(dir) {
+    const r = submitClash(game.character, game.combat, dir);
+    game.character = r.character; game.combat = r.combat;
+    game.lastLines = [...game.lastLines, ...r.lines];
+    afterExchange();
+  }
+
+  function afterExchange() {
+    if (game.combat.outcome && !game.summary) {
+      const f = finishCombat(game.character, game.combat);
+      game.character = f.character;
+      game.summary = f;
+    }
+    save();
+    render();
+  }
+
+  function back() {
+    if (ui.pending) { ui.pending = null; render(); }
+  }
+  function turnPage(delta) {
+    if (ui.pending || game.combat.pendingClash || game.combat.outcome) return;
+    const n = pageCount();
+    ui.page = (ui.page + delta + n) % n;
+    render();
+  }
+  function toggleLucky() {
+    if (!game.combat.current || !game.combat.current.fortune.open) return;
+    ui.armed = !ui.armed; render();
+  }
+
+  // ---- Drawing ------------------------------------------------------------
+  function render() {
+    const { character, combat } = game;
+    const enemy = getEnemy(combat.enemyId);
+    const cur = combat.current;
+    const clashing = !!combat.pendingClash;
+
+    $('ename').textContent = enemy.name.toUpperCase();
+    $('erange').textContent = `· ${enemy.range}`;
+    const fortune = !combat.outcome && cur && cur.fortune.open;
+    $('star').classList.toggle('show', fortune);
+    $('star').classList.toggle('armed', fortune && ui.armed);
+    $('hint').textContent = fortune ? cur.fortune.hint + (ui.armed ? '  Lucky attempt armed: hold an action.' : '  Tap ★ for a lucky attempt.') : '';
+
+    if (combat.outcome) {
+      $('caption').textContent = combat.outcome === 'victory' ? 'The werewolf lies still.' : 'You have fallen.';
+      $('chips').innerHTML = '';
+    } else if (clashing) {
+      $('caption').textContent = 'CLASH! ' + combat.pendingClash.caption;
+      $('chips').innerHTML = combat.pendingClash.tells.map(t => `<span class="chip">${t}</span>`).join('') || '<span class="chip none">no clues</span>';
+    } else {
+      $('caption').textContent = `“${cur.caption}”`;
+      $('chips').innerHTML = cur.tells.length
+        ? cur.tells.map(t => `<span class="chip">${t}</span>`).join('')
+        : '<span class="chip none">no other clues</span>';
+    }
+
+    const you = $('row-you').children, foe = $('row-foe').children;
+    ATTRS.forEach((k, i) => {
+      const s = character.attrs[k].stamina, t = attrTotal(character, k);
+      you[i + 1].textContent = `${s}/${t}`; you[i + 1].className = s <= Math.ceil(t / 4) ? 'low' : '';
+      const es = combat.enemy.stamina[k], et = combat.enemy.totals[k];
+      foe[i + 1].textContent = `${es}/${et}`; foe[i + 1].className = 'foe';
+    });
+
+    const bits = [];
+    const P = combat.player;
+    const wid = character.gear.ready[P.weaponIndex];
+    if (wid) bits.push(`In hand: ${getWeapon(wid).name} (${character.durability[wid]}/20)`);
+    bits.push(`Luck ${luckOf(character)} · lucky number ${character.luckyNumber}`);
+    for (const c of P.conditions) bits.push(`<span class="cond">${TRAITS[c.id].name}</span>`);
+    if (P.advantageNext) bits.push('<span class="tpt">Advantage next attack</span>');
+    if (P.speedPenaltyNext) bits.push('<span class="cond">Next action slower</span>');
+    for (const t of character.traits.filter(t => t.kind === 'TPT')) bits.push(`<span class="tpt">${TRAITS[t.id].name}</span>`);
+    for (const c of combat.enemy.conditions) bits.push(`<span class="cond">Werewolf ${TRAITS[c.id].name}</span>`);
+    if (combat.enemy.enraged) bits.push('<span class="cond">Werewolf Enraged</span>');
+    $('status').innerHTML = bits.join(' · ');
+
+    const s = slots();
+    for (const btn of document.querySelectorAll('.opt')) {
+      const slot = s[btn.dataset.dir];
+      btn.querySelector('.lbl').textContent = slot ? slot.label : '';
+      btn.querySelector('.sub').textContent = slot && slot.sub ? slot.sub : '';
+      btn.disabled = !slot || !slot.enabled;
+    }
+    $('diamond').classList.toggle('clashing', clashing);
+    let mode = '';
+    if (combat.outcome) mode = 'Fight over';
+    else if (clashing) mode = 'CLASH<br>pick a direction';
+    else if (ui.pending) mode = (ui.pending.action === 'block' ? 'Block' : ui.pending.action === 'attack' ? 'Attack' : getAbility(ui.pending.abilityId).name) + '<br>where?';
+    else mode = `Page ${ui.page + 1}/${pageCount()}`;
+    if (ui.armed && !combat.outcome) mode += '<br>★ armed';
+    $('mode').innerHTML = mode;
+    $('back').disabled = !ui.pending;
+    $('prev').disabled = $('next').disabled = !!(ui.pending || clashing || combat.outcome);
+
+    const ex = combat.outcome ? combat.exchange : combat.exchange - 1;
+    $('result').innerHTML = game.lastLines.length
+      ? `<div class="ex">Exchange ${ex}</div>` + game.lastLines.map(l => `<div>${l}</div>`).join('')
+      : '<div class="ex">Read the werewolf, then hold a choice.</div>';
+
+    if (combat.outcome && game.summary) {
+      const f = game.summary.fatigue;
+      const drops = ATTRS.filter(k => f[k]).map(k => `−${f[k]} ${k}`).join(', ') || 'none';
+      $('end').innerHTML = `<div style="font-size:28px">${combat.outcome === 'victory' ? 'VICTORY' : 'DEFEAT'}</div>
+        <div>${combat.exchange} exchanges. Combat fatigue: ${drops}.</div>
+        <div>Tap Restart to fight again.</div>`;
+      $('end').classList.add('show');
+    } else {
+      $('end').classList.remove('show');
+    }
+
+    $('log').innerHTML = combat.log.slice().reverse().slice(0, 60).map(l => `<div>${l}</div>`).join('');
+  }
+
+  // ---- Wire up -----------------------------------------------------------------
+  const holds = {};
+  for (const btn of document.querySelectorAll('.opt')) {
+    holds[btn.dataset.dir] = attachHold(btn, () => {
+      const slot = slots()[btn.dataset.dir];
+      if (slot && slot.enabled) slot.run();
+    });
+  }
+  attachKeyboard({ getHold: (d) => holds[d], onPage: turnPage, onBack: back, onLucky: toggleLucky });
+  attachSwipes($('diamond'), { onPage: turnPage, onBack: back });
+  $('prev').addEventListener('click', () => turnPage(-1));
+  $('next').addEventListener('click', () => turnPage(1));
+  $('back').addEventListener('click', back);
+  $('star').addEventListener('click', toggleLucky);
+  $('restart').addEventListener('click', newGame);
+
+  const saved = load();
+  if (saved) {
+    game = saved;
+    $('ability').value = saved.ability || 'planB';
+    render();
+  } else {
+    newGame();
+  }
+</script>
+</body>
+</html>
