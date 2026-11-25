@@ -1,30 +1,41 @@
 // Automatic tests for the combat exchange loop (Build Spec → "Combat resolution",
-// "Enemy patterns", and the Step 2 phone checks).
+// "Enemy patterns", feints, the repetition counter, and the Step 2 phone checks).
+//
+// Most tests pin the enemy to its MAIN action with force(), so the rules can
+// be checked exactly; the feint tests pick variants on purpose.
 
-import { test, eq, ok, throws } from './harness.js';
+import { test, slowTest, eq, ok, throws } from './harness.js';
 import * as C from '../engine/combat.js';
-import { staminaOf, attrTotals } from '../engine/rules.js';
+import { staminaOf } from '../engine/rules.js';
+import { ENEMIES } from '../data/enemies.js';
 import { practiceFighter, simulateFight, learnedPolicy, learnedClash, randomPolicy, randomClash, createRng } from './sim.js';
 
-// Start a werewolf fight with the Fortune opening closed (unless a test opens it).
-function fight(enemyId = 'werewolf', ability = 'planB', seed = 1) {
-  const c = practiceFighter(ability);
-  const cb = C.startCombat(c, enemyId, { seed });
-  cb.current.fortune.open = false;
-  return { c, cb };
+const WOLF = ENEMIES.werewolf.attrs;     // { STR: 7, AGI: 7, WIS: 3, FAI: 2 }
+const KNIGHT = ENEMIES.barrowKnight.attrs;
+
+// Pin the enemy to the main action (or a named variant) of its current step.
+function force(s, variantId) {
+  if (s.cb.current) {
+    s.cb = C.withVariant(s.cb, variantId || C.stepFor(s.cb).variants[0].id);
+    s.cb.current.fortune.open = false;
+  }
+  return s;
 }
-function act(s, choice) {
+function fight(enemyId = 'werewolf', ability = 'planB', seed = 1, raceId = 'human') {
+  const c = practiceFighter(ability, raceId);
+  return force({ c, cb: C.startCombat(c, enemyId, { seed }) });
+}
+function act(s, choice, variantId) {
   const r = C.submitAction(s.c, s.cb, choice);
-  if (r.combat.current) r.combat.current.fortune.open = false;
-  return { c: r.character, cb: r.combat, lines: r.lines };
+  return force({ c: r.character, cb: r.combat, lines: r.lines }, variantId);
 }
 function clash(s, dir) {
   const r = C.submitClash(s.c, s.cb, dir);
-  if (r.combat.current) r.combat.current.fortune.open = false;
-  return { c: r.character, cb: r.combat, lines: r.lines };
+  return force({ c: r.character, cb: r.combat, lines: r.lines });
 }
 const holdDagger = (s) => { s.cb.player.weaponIndex = 1; return s; };
 const step = (s) => s.cb.current.stepId;
+const totalStamina = (c) => Object.values(staminaOf(c)).reduce((a, b) => a + b, 0);
 
 // --- 1. Enemy commits, 2. clues ------------------------------------------------
 
@@ -33,10 +44,22 @@ test('Werewolf opens with step 1: “Its eyes drop to your legs.”', () => {
   eq(step(s), 'w1');
   eq(s.cb.current.caption, 'Its eyes drop to your legs.');
 });
-test('Clues: a Human Fighter (WIS 6 + FAI 6, Luck 8) sees 1 of 2 tells, plus the caption', () => {
-  const s = fight();
-  eq(s.cb.current.tells, ['A growl from your left']);
-  eq(s.cb.current.tellCount, 2);
+test('Clues: a Human Fighter (1 clue) sees only the shared first clue', () => {
+  const cb = C.startCombat(practiceFighter(), 'werewolf', { seed: 1 });
+  eq(cb.current.tells, ['Its eyes are on your legs']);
+  eq(cb.current.tellCount, 2);
+});
+test('Clues: a second clue tells the main action apart from the feint', () => {
+  const g = practiceFighter('planB', 'gnome');   // WIS 10 + FAI 5 = 15 → 2 clues
+  const seen = new Set();
+  for (let seed = 1; seed <= 40; seed++) {
+    const cb = C.startCombat(g, 'werewolf', { seed });
+    eq(cb.current.tells[0], 'Its eyes are on your legs');
+    const second = cb.current.tells[1];
+    eq(second, cb.current.variantId === 'w1-legs' ? 'Its shoulder drops low' : 'A growl from your left');
+    seen.add(second);
+  }
+  eq(seen.size, 2, 'both the main action and the feint showed up');
 });
 test('Clues: Focused gives one extra clue for one exchange', () => {
   const c = practiceFighter();
@@ -46,31 +69,77 @@ test('Clues: Focused gives one extra clue for one exchange', () => {
   const r = C.submitAction(c, cb, { action: 'block', target: 'legs' });
   ok(!r.character.traits.some(t => t.id === 'focused'), 'used up');
 });
-test('Clues: one fewer at Night', () => {
-  const cb = C.startCombat(practiceFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' });
-  eq(cb.current.tells.length, 0);
-  eq(cb.current.caption, 'Its eyes drop to your legs.');
+test('Clues: one fewer at Night (the caption still shows)', () => {
+  const h = C.startCombat(practiceFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' });
+  eq(h.current.tells.length, 0);
+  eq(h.current.caption, 'Its eyes drop to your legs.');
+  const g = C.startCombat(practiceFighter('planB', 'gnome'), 'werewolf', { seed: 1, timeOfDay: 'Night' });
+  eq(g.current.tells.length, 1);
 });
 
-// --- Pattern -----------------------------------------------------------------------
+// --- Feints -------------------------------------------------------------------------
+
+test('Feints: every step’s variants share the first clue and caption; second clues all differ', () => {
+  for (const e of Object.values(ENEMIES)) {
+    for (const st of e.pattern) {
+      ok(e.tellText[st.first], `${st.id} first clue has words`);
+      const seconds = st.variants.map(v => v.second);
+      eq(new Set(seconds).size, seconds.length, `${st.id} second clues differ`);
+      for (const v of st.variants) ok(e.tellText[v.second], `${v.id} second clue has words`);
+      ok(st.variants.length === 1 || (st.variants.length >= 2 && st.variants.length <= 3), `${st.id} has 1–2 feints`);
+    }
+  }
+});
+test('Feints: the enemy usually does the main action; feints come at the set rate', () => {
+  const f = ENEMIES.werewolf.feintChance;
+  let feints = 0;
+  const N = 3000;
+  for (let seed = 1; seed <= N; seed++) {
+    if (C.startCombat(practiceFighter(), 'werewolf', { seed }).current.variantId !== 'w1-legs') feints++;
+  }
+  ok(Math.abs(feints / N - f) < 0.03, `feint rate ${(feints / N).toFixed(3)} vs ${f}`);
+  ok(f < 0.5, 'main action is the most likely');
+});
+test('Feints: with two feints, each comes up about equally often', () => {
+  const odds = C.variantOdds(ENEMIES.werewolf, ENEMIES.werewolf.pattern[2]);
+  eq(odds.length, 3);
+  ok(Math.abs(odds[1] - odds[2]) < 1e-9 && odds[0] > odds[1], 'main most likely, feints equal');
+  ok(Math.abs(odds.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'adds to 1');
+});
+test('Feints: chosen by the seeded random function (same seed, same choice)', () => {
+  const a = [], b = [];
+  for (let seed = 1; seed <= 50; seed++) {
+    a.push(C.startCombat(practiceFighter(), 'werewolf', { seed }).current.variantId);
+    b.push(C.startCombat(practiceFighter(), 'werewolf', { seed }).current.variantId);
+  }
+  eq(a, b);
+});
+test('Feints: when it feints left instead of clawing your legs, Block → Legs fails and Block → Left works', () => {
+  const s = force(fight(), 'w1-left');
+  const legs = act(s, { action: 'block', target: 'legs' });
+  eq(legs.c.attrs.AGI.stamina, 6 - 3);
+  const left = act(s, { action: 'block', target: 'left' });
+  eq(staminaOf(left.c), staminaOf(s.c));
+});
+
+// --- Pattern -------------------------------------------------------------------------
 
 test('Pattern: steps loop 1, 2, 3, 4, 1 when nothing is Blocked', () => {
   let s = fight(); const seen = [step(s)];
-  for (let i = 0; i < 4; i++) { s = act(s, { action: 'pray' }); seen.push(step(s)); }
+  const moves = [{ action: 'pray' }, { action: 'block', target: 'left' }];
+  for (let i = 0; i < 4; i++) { s = act(s, moves[i % 2]); seen.push(step(s)); }
   eq(seen, ['w1', 'w2', 'w3', 'w4', 'w1']);
 });
-test('Phone check: when its eyes drop to your legs, Block → Legs stops the hit', () => {
+test('Phone check: when its eyes drop to your legs (main action), Block → Legs stops the hit', () => {
   const s = fight();
-  const before = staminaOf(s.c);
   const r = act(s, { action: 'block', target: 'legs' });
-  eq(staminaOf(r.c), before);
+  eq(staminaOf(r.c), staminaOf(s.c));
   ok(r.lines.some(l => l.includes('You block its claws')), 'says blocked');
 });
 test('Not blocking: the claws rake your legs for 3 AGI', () => {
-  const r = act(fight(), { action: 'pray' });
-  eq(r.c.attrs.AGI.stamina, 6 - 3);
+  eq(act(fight(), { action: 'pray' }).c.attrs.AGI.stamina, 6 - 3);
 });
-test('After it is Blocked, the werewolf jumps to step 2 (bite at your head)', () => {
+test('After it is Blocked, the werewolf jumps to step 2 (jaws at your throat)', () => {
   const r = act(fight(), { action: 'block', target: 'legs' });
   eq(step(r), 'w2');
   eq(r.cb.current.caption, 'Its jaws open toward your throat.');
@@ -80,62 +149,95 @@ test('Blocking step 2 does not loop step 2 forever: it moves on to step 3', () =
   s = act(s, { action: 'block', target: 'head' });
   eq(step(s), 'w3');
 });
-test('Phone check: when it circles to your right, Block → Right stops the hit', () => {
-  let s = act(fight(), { action: 'pray' });          // w1 → w2
-  s = act(s, { action: 'pray' });                   // w2 → w3
+test('Phone check: when it circles to your right (main action), Block → Right stops the hit', () => {
+  let s = act(fight(), { action: 'pray' });
+  s = act(s, { action: 'block', target: 'left' });
   eq(s.cb.current.caption, 'It circles to your right.');
-  const before = staminaOf(s.c);
-  s = act(s, { action: 'block', target: 'right' });
-  eq(staminaOf(s.c), before);
+  const r = act(s, { action: 'block', target: 'right' });
+  eq(staminaOf(r.c), staminaOf(s.c));
 });
-test('Phone check: the crouching trick attacks your Head, not your legs', () => {
+test('Phone check: the crouching trick (main action) bites your Head, not your legs', () => {
   let s = fight();
-  for (let i = 0; i < 3; i++) s = act(s, { action: 'pray' });
+  for (const m of [{ action: 'pray' }, { action: 'block', target: 'left' }, { action: 'pray' }]) s = act(s, m);
   eq(s.cb.current.caption, 'It crouches, eyes on your legs.');
-  const legs = act(s, { action: 'block', target: 'legs' });
-  ok(legs.c.attrs.STR.stamina < s.c.attrs.STR.stamina, 'blocking legs fails');
-  const head = act(s, { action: 'block', target: 'head' });
-  eq(staminaOf(head.c), staminaOf(s.c));
+  ok(act(s, { action: 'block', target: 'legs' }).c.attrs.STR.stamina < s.c.attrs.STR.stamina, 'blocking legs fails');
+  eq(staminaOf(act(s, { action: 'block', target: 'head' }).c), staminaOf(s.c));
 });
 test('Below half stamina: it howls at the moon, becomes Enraged, once only', () => {
   let s = fight();
-  s.cb.enemy.stamina = { STR: 4, AGI: 4, WIS: 4, FAI: 3 };
-  s.cb = C.beginExchange(s.c, s.cb);
+  s.cb.enemy.stamina = { STR: 2, AGI: 2, WIS: 2, FAI: 2 };
+  s.cb = C.beginExchange(s.c, s.cb); force(s);
   eq(step(s), 'w5'); eq(s.cb.current.caption, 'It howls at the moon.');
   s = act(s, { action: 'pray' });
   ok(s.cb.enemy.enraged, 'Enraged');
   ok(step(s) !== 'w5', 'not repeated');
-  const tptCount = s.c.traits.filter(t => t.kind === 'TPT').length;
-  eq(tptCount, 2, 'Pray gives two TPTs when the enemy took no offensive action');
+  eq(s.c.traits.filter(t => t.kind === 'TPT').length, 2, 'Pray gives two TPTs when the enemy took no offensive action');
 });
 test('Enraged: its attacks deal 1 more damage and you see one fewer clue', () => {
   const s = fight(); s.cb.enemy.enraged = true;
-  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 0 } });
+  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 0 } }); force(s);
   eq(s.cb.current.tells.length, 0);
-  s.cb.current.fortune.open = false;
   eq(act(s, { action: 'pray' }).c.attrs.AGI.stamina, 6 - 4);
+});
+
+// --- Repetition counter -----------------------------------------------------------------
+
+test('Repetition: the same action and target two exchanges running makes its next step a counter', () => {
+  let s = act(fight(), { action: 'attack', target: 'left' });
+  s = act(s, { action: 'attack', target: 'left' });
+  eq(step(s), 'counter');
+  eq(s.cb.current.caption, 'It has read your rhythm.');
+  eq(s.cb.current.tells, ['It watches your every move']);
+});
+test('Repetition: the counter is a fast attack with Advantage (claws 2 → 3, +1 = 4)', () => {
+  let s = act(fight(), { action: 'attack', target: 'left' });
+  s = act(s, { action: 'attack', target: 'left' }, 'counter-legs');
+  const r = act(s, { action: 'pray' });
+  eq(totalStamina(s.c) - totalStamina(r.c), 4);
+  ok(r.lines.some(l => l.includes('claws')), 'uses its fastest weapon');
+});
+test('Repetition: after repeated Blocks, the counter never aims at the guarded target', () => {
+  let s = act(fight(), { action: 'block', target: 'head' });
+  s = act(s, { action: 'block', target: 'head' });
+  eq(step(s), 'counter');
+  ok(!C.stepFor(s.cb).variants.some(v => v.target === 'head'), 'head is never the target');
+  eq(C.stepFor(s.cb).variants.length, 3);
+});
+test('Repetition: praying twice running also draws a counter', () => {
+  let s = act(fight(), { action: 'pray' });
+  s = act(s, { action: 'pray' });
+  eq(step(s), 'counter');
+});
+test('Repetition: changing the action or the target avoids the counter', () => {
+  let s = act(fight(), { action: 'attack', target: 'left' });
+  ok(step(act(s, { action: 'attack', target: 'right' })) !== 'counter', 'different target');
+  ok(step(act(s, { action: 'block', target: 'left' })) !== 'counter', 'different action');
+});
+test('Repetition: a counter does not move the pattern on; the loop resumes where it was', () => {
+  let s = act(fight(), { action: 'attack', target: 'left' });  // w1 → w2
+  s = act(s, { action: 'attack', target: 'left' });            // w2 → counter
+  eq(step(s), 'counter');
+  s = act(s, { action: 'block', target: 'right' });            // counter → w3
+  eq(step(s), 'w3');
 });
 
 // --- 4. Speed ---------------------------------------------------------------------
 
 test('Speed: the slower side takes Disadvantage (sword, Fair, vs claws, Swift: 3 → 1)', () => {
-  const r = act(fight(), { action: 'attack', target: 'left' });
-  eq(r.cb.enemy.stamina.STR, 12 - 1);
+  eq(act(fight(), { action: 'attack', target: 'left' }).cb.enemy.stamina.STR, WOLF.STR - 1);
 });
-test('Speed: dagger (Swift) vs bite (Fair): the bite is halved (4 → 2)', () => {
-  let s = act(fight(), { action: 'pray' });       // to w2 (bite)
-  holdDagger(s);
+test('Speed: dagger (Swift) vs bite (Fair): the bite is halved', () => {
+  const s = holdDagger(act(fight(), { action: 'pray' }));   // w2 main: bite
   const r = act(s, { action: 'attack', target: 'legs' });
-  eq(r.c.attrs.STR.stamina, s.c.attrs.STR.stamina - 2);
-  eq(r.cb.enemy.stamina.AGI, 12 - 2, 'dagger 1 + AGI 6 ÷ 5');
+  eq(r.c.attrs.STR.stamina, s.c.attrs.STR.stamina - 2, 'bite 3 halved to 1, +1');
+  eq(r.cb.enemy.stamina.AGI, WOLF.AGI - 2, 'dagger 1 + AGI 6 ÷ 5');
 });
 test('Speed: Plan B gives the next action a Speed disadvantage', () => {
-  let s = act(fight(), { action: 'pray' });       // w2: bite, Fair
+  let s = act(fight(), { action: 'pray' });
   s = act(s, { action: 'ability', abilityId: 'planB', target: 'legs' });
   ok(s.cb.player.speedPenaltyNext, 'penalty set');
   eq(s.cb.player.weaponIndex, 1, 'switched to the dagger');
-  // w3: claws (Swift). Dagger would be Swift, but the penalty makes it Fair → Disadvantage.
-  const r = act(s, { action: 'attack', target: 'left' });
+  const r = act(s, { action: 'attack', target: 'left' });   // w3 claws: dagger slowed to Fair
   eq(r.cb.enemy.stamina.AGI, s.cb.enemy.stamina.AGI - 1);
 });
 
@@ -151,27 +253,23 @@ test('Attacks meet: opposite sides Clank, same label Clashes, others don’t int
   eq(C.attacksMeet('left', 'head'), 'none');
 });
 test('Clank: neither deals damage and both become Off-Balance', () => {
-  let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'pray' }); // w3 claws right
-  holdDagger(s);
+  let s = act(fight(), { action: 'pray' }); s = holdDagger(act(s, { action: 'block', target: 'left' }));  // w3 claws right
   const r = act(s, { action: 'attack', target: 'left' });
   eq(staminaOf(r.c), staminaOf(s.c)); eq(r.cb.enemy.stamina, s.cb.enemy.stamina);
   ok(r.cb.player.conditions.some(x => x.id === 'offBalance'), 'player Off-Balance');
   ok(r.cb.enemy.conditions.some(x => x.id === 'offBalance'), 'enemy Off-Balance');
 });
 test('Off-Balance: Disadvantage on the next exchange only, then it clears', () => {
-  let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'pray' });
-  holdDagger(s);
-  s = act(s, { action: 'attack', target: 'left' });   // Clank at w3; now w4 (bite head)
-  const off = act(s, { action: 'attack', target: 'legs' }); // dagger Swift vs bite Fair; Off-Balance halves 2 → 1
-  eq(off.cb.enemy.stamina.AGI, s.cb.enemy.stamina.AGI - 1);
-  // The werewolf was Off-Balance too, and slower: its bite 4 → 2.
-  eq(off.c.attrs.STR.stamina, s.c.attrs.STR.stamina - 2);
-  eq(off.cb.player.conditions, [], 'cleared');
+  let s = act(fight(), { action: 'pray' }); s = holdDagger(act(s, { action: 'block', target: 'left' }));
+  s = act(s, { action: 'attack', target: 'left' });     // Clank at w3; now w4 (bite head)
+  const r = act(s, { action: 'attack', target: 'legs' });
+  eq(r.cb.enemy.stamina.AGI, s.cb.enemy.stamina.AGI - 1, 'dagger 2 halved');
+  eq(r.c.attrs.STR.stamina, s.c.attrs.STR.stamina - 2, 'bite 3 halved to 1, +1');
+  eq(r.cb.player.conditions, [], 'cleared');
 });
 test('No interaction: dagger at Head vs claws at Legs, both hit', () => {
-  const s = holdDagger(fight());
-  const r = act(s, { action: 'attack', target: 'head' });
-  eq(r.cb.enemy.stamina.AGI, 12 - 2);
+  const r = act(holdDagger(fight()), { action: 'attack', target: 'head' });
+  eq(r.cb.enemy.stamina.AGI, WOLF.AGI - 2);
   eq(r.c.attrs.AGI.stamina, 6 - 3);
 });
 
@@ -179,12 +277,12 @@ test('No interaction: dagger at Head vs claws at Legs, both hit', () => {
 
 test('Clash: the same label at equal speed opens a Clash and deals no damage', () => {
   const s = holdDagger(fight());
-  const r = act(s, { action: 'attack', target: 'legs' });
-  ok(r.cb.pendingClash, 'Clash waiting');
-  eq(r.cb.pendingClash.enemyDir, 'left', 'from the pattern step');
-  throws(() => C.submitAction(r.c, r.cb, { action: 'pray' }), 'must answer the Clash first');
-  const done = clash(r, 'head');
-  eq(staminaOf(done.c), staminaOf(s.c)); eq(done.cb.enemy.stamina, s.cb.enemy.stamina);
+  const r = C.submitAction(s.c, s.cb, { action: 'attack', target: 'legs' });
+  ok(r.combat.pendingClash, 'Clash waiting');
+  eq(r.combat.pendingClash.enemyDir, 'legs', 'from the variant');
+  throws(() => C.submitAction(r.character, r.combat, { action: 'pray' }), 'must answer the Clash first');
+  const done = C.submitClash(r.character, r.combat, 'head');
+  eq(staminaOf(done.character), staminaOf(s.c)); eq(done.combat.enemy.stamina, s.cb.enemy.stamina);
 });
 test('Clash won: Advantage on your next attack; the enemy is Off-Balance', () => {
   let s = act(fight(), { action: 'pray' });           // w2 bite head (Fair)
@@ -192,10 +290,10 @@ test('Clash won: Advantage on your next attack; the enemy is Off-Balance', () =>
   s = clash(s, 'head');
   ok(s.cb.player.advantageNext, 'Advantage');
   ok(s.cb.enemy.conditions.some(x => x.id === 'offBalance'), 'enemy Off-Balance');
-  // w3: claws (Swift) vs sword (Fair): slower cancels Advantage → full 3. Claws Off-Balance: 3 → 1.
+  // w3: sword (slower, but Advantage) → full 3; claws Off-Balance 2 → 1, +1.
   const r = act(s, { action: 'attack', target: 'left' });
-  eq(r.cb.enemy.stamina.STR, 12 - 3);
-  eq(r.c.attrs.AGI.stamina, s.c.attrs.AGI.stamina - 1);
+  eq(r.cb.enemy.stamina.STR, WOLF.STR - 3);
+  eq(totalStamina(s.c) - totalStamina(r.c), 2);
 });
 test('Clash lost: the enemy gets Advantage and you are Off-Balance', () => {
   let s = act(fight(), { action: 'pray' });
@@ -203,25 +301,15 @@ test('Clash lost: the enemy gets Advantage and you are Off-Balance', () => {
   s = clash(s, 'legs');
   ok(s.cb.enemy.advantageNext, 'enemy Advantage');
   ok(s.cb.player.conditions.some(x => x.id === 'offBalance'), 'player Off-Balance');
-  const r = act(s, { action: 'pray' });  // claws 3 with Advantage → 5
-  const total = (x) => Object.values(staminaOf(x)).reduce((a, b) => a + b, 0);
-  eq(total(s.c) - total(r.c), 5);
+  const r = act(s, { action: 'pray' });  // claws 2 with Advantage → 3, +1
+  eq(totalStamina(s.c) - totalStamina(r.c), 4);
 });
 
 // --- 7. Resolve --------------------------------------------------------------------------
 
-test('Predictable: the same attack at the same target twice running is blocked the second time', () => {
-  let s = act(fight(), { action: 'attack', target: 'left' });
-  const r = act(s, { action: 'attack', target: 'left' });
-  eq(r.cb.enemy.stamina, s.cb.enemy.stamina);
-  ok(r.lines.some(l => l.includes('reads the repeat')), 'explains why');
-  const other = act(s, { action: 'attack', target: 'right' });
-  ok(other.cb.enemy.stamina.STR < s.cb.enemy.stamina.STR, 'a different target still hits');
-});
 test('Block: Off-Balance only halves the damage (rounded up)', () => {
   const s = fight(); s.cb.player.conditions.push({ id: 'offBalance', until: 1 });
-  const r = act(s, { action: 'block', target: 'legs' });
-  eq(r.c.attrs.AGI.stamina, 6 - 2);
+  eq(act(s, { action: 'block', target: 'legs' }).c.attrs.AGI.stamina, 6 - 2);
 });
 test('Overflow: claws for 3 into 1 AGI spill 2 into STR', () => {
   const s = fight(); s.c.attrs.AGI.stamina = 1;
@@ -230,42 +318,35 @@ test('Overflow: claws for 3 into 1 AGI spill 2 into STR', () => {
 });
 test('Empty stamina: acting with a pool at 0 lowers its Natural total', () => {
   const s = fight(); s.c.attrs.WIS.stamina = 0;
-  const r = act(s, { action: 'block', target: 'legs' });
-  eq(r.c.attrs.WIS.natural, 5);
+  eq(act(s, { action: 'block', target: 'legs' }).c.attrs.WIS.natural, 5);
 });
 test('Pray: one TPT when the enemy attacks', () => {
-  const r = act(fight(), { action: 'pray' });
-  eq(r.c.traits.filter(t => t.kind === 'TPT').length, 1);
+  eq(act(fight(), { action: 'pray' }).c.traits.filter(t => t.kind === 'TPT').length, 1);
 });
 test('Pray: Emboldened gives Advantage on the next attack, then is used up', () => {
-  const s = act(fight(), { action: 'pray' });  // now w2 bite, Fair
-  s.c.traits = s.c.traits.filter(t => t.kind !== 'TPT');
-  s.c.traits.push({ id: 'emboldened', kind: 'TPT' });
-  const r = act(s, { action: 'attack', target: 'legs' });  // sword 3 → Advantage 5
-  eq(r.cb.enemy.stamina.STR, 12 - 5);
+  const s = act(fight(), { action: 'pray' });   // w2 bite, Fair
+  s.c.traits = s.c.traits.filter(t => t.kind !== 'TPT').concat([{ id: 'emboldened', kind: 'TPT' }]);
+  const r = act(s, { action: 'attack', target: 'legs' });   // sword 3 → 5
+  eq(r.cb.enemy.stamina.STR, WOLF.STR - 5);
   ok(!r.c.traits.some(t => t.id === 'emboldened'), 'used');
 });
 test('Pray: Blessed makes the next hit 25% lighter', () => {
   const s = fight(); s.c.traits.push({ id: 'blessed', kind: 'TPT' });
-  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 1 } }); // bite 4
-  s.cb.current.fortune.open = false;
-  const r = act(s, { action: 'block', target: 'legs' });
-  eq(r.c.attrs.STR.stamina, 8 - 3);
+  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 1 } }); force(s);  // bite 4
+  eq(act(s, { action: 'block', target: 'legs' }).c.attrs.STR.stamina, 8 - 3);
 });
 test('Pray: Steeled ignores the next TNT (Off-Balance from a Clank)', () => {
-  let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'pray' });
+  let s = act(fight(), { action: 'pray' }); s = holdDagger(act(s, { action: 'block', target: 'left' }));
   s.c.traits = [{ id: 'steeled', kind: 'TPT' }];
-  holdDagger(s);
-  const r = act(s, { action: 'attack', target: 'left' });
-  eq(r.cb.player.conditions, []);
+  eq(act(s, { action: 'attack', target: 'left' }).cb.player.conditions, []);
 });
 test('Item: a herbal draught gives +4 to the lowest pool and is used up', () => {
   const s = fight(); s.c.attrs.WIS.stamina = 1;
-  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 1 } });
-  s.cb.current.fortune.open = false;
+  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 1 } }); force(s);
   let r = act(s, { action: 'item' });
   eq(r.c.attrs.WIS.stamina, 5);
   eq(r.c.pack, [{ itemId: 'herbalDraught', qty: 1 }]);
+  r = act(r, { action: 'block', target: 'left' });
   r = act(r, { action: 'item' });
   eq(r.c.pack, []);
   eq(C.availableActions(r.c, r.cb).page1[3].enabled, false);
@@ -276,36 +357,36 @@ test('Crusher: +50% damage at Drawn speed; armor still applies', () => {
   eq(step(s), 'k1');
   s = act(s, { action: 'block', target: 'head' });   // blocked → jumps to k3 (Block → Legs)
   eq(step(s), 'k3');
-  const r = act(s, { action: 'ability', abilityId: 'crusher', target: 'head' });
   // sword 3 × 1.5 = 5, Heavy helm −2 = 3
-  eq(r.cb.enemy.stamina.STR, 14 - 3);
+  eq(act(s, { action: 'ability', abilityId: 'crusher', target: 'head' }).cb.enemy.stamina.STR, KNIGHT.STR - 3);
 });
 test('Cooldowns: Plan B (Fair) is unavailable for 2 exchanges, Crusher (Drawn) for 3', () => {
   let s = act(fight(), { action: 'ability', abilityId: 'planB', target: 'head' });
   const avail = [];
-  for (let i = 0; i < 3; i++) { avail.push(C.availableActions(s.c, s.cb).abilities[0].enabled); s = act(s, { action: 'pray' }); }
+  const moves = [{ action: 'pray' }, { action: 'block', target: 'left' }];
+  for (let i = 0; i < 3; i++) { avail.push(C.availableActions(s.c, s.cb).abilities[0].enabled); s = act(s, moves[i % 2]); }
   eq(avail, [false, false, true]);
-  throws(() => C.submitAction(act(fight(), { action: 'ability', abilityId: 'planB', target: 'head' }).c,
-    act(fight(), { action: 'ability', abilityId: 'planB', target: 'head' }).cb,
-    { action: 'ability', abilityId: 'planB', target: 'head' }), 'refused while cooling down');
+  const used = act(fight(), { action: 'ability', abilityId: 'planB', target: 'head' });
+  throws(() => C.submitAction(used.c, used.cb, { action: 'ability', abilityId: 'planB', target: 'head' }), 'refused while cooling down');
   let k = act(fight('barrowKnight', 'crusher'), { action: 'ability', abilityId: 'crusher', target: 'legs' });
   const av2 = [];
-  for (let i = 0; i < 4; i++) { av2.push(C.availableActions(k.c, k.cb).abilities[0].enabled); k = act(k, { action: 'block', target: 'head' }); }
+  for (let i = 0; i < 4; i++) { av2.push(C.availableActions(k.c, k.cb).abilities[0].enabled); k = act(k, moves[i % 2]); }
   eq(av2, [false, false, false, true]);
 });
-test('Barrow Knight: Block → Legs stops an attack at the legs', () => {
-  let s = act(fight('barrowKnight'), { action: 'block', target: 'head' });
+test('Barrow Knight: Block → Legs (main action) stops an attack at the legs', () => {
+  const s = act(fight('barrowKnight'), { action: 'block', target: 'head' });
   eq(s.cb.current.caption, 'It plants its feet, blade low.');
-  const r = act(s, { action: 'attack', target: 'legs' });
-  eq(r.cb.enemy.stamina, s.cb.enemy.stamina);
+  eq(act(s, { action: 'attack', target: 'legs' }).cb.enemy.stamina, s.cb.enemy.stamina);
 });
-test('Barrow Knight: the trick (step 4) looks like step 1 but swings at your legs', () => {
+test('Barrow Knight: the trick (step 4) looks like step 1 but its main swing goes for your legs', () => {
   let s = act(fight('barrowKnight'), { action: 'block', target: 'head' });  // k1 → k3
   s = act(s, { action: 'pray' });                                          // k3 → k4
   eq(step(s), 'k4');
   eq(s.cb.current.caption, 'The visor turns to your head.');
-  const r = act(s, { action: 'block', target: 'legs' });
-  eq(staminaOf(r.c), staminaOf(s.c));
+  const k1 = ENEMIES.barrowKnight.pattern[0], k4 = ENEMIES.barrowKnight.pattern[3];
+  eq(k4.first, k1.first, 'same first clue');
+  eq(k4.variants[0].second, k1.variants[0].second, 'same second clue: only counting tells them apart');
+  eq(staminaOf(act(s, { action: 'block', target: 'legs' }).c), staminaOf(s.c));
 });
 
 // --- Fortune and lucky attempts ----------------------------------------------------------
@@ -315,7 +396,7 @@ function findLucky(wantSuccess) {
     const c = practiceFighter();
     const cb = C.startCombat(c, 'werewolf', { seed });
     if (!cb.current.fortune.open) continue;
-    const r = C.submitAction(c, cb, { action: 'attack', target: 'left', lucky: true });
+    const r = C.submitAction(c, cb, { action: 'attack', target: 'right', lucky: true });
     if (r.lines.some(l => l.startsWith('Lucky!')) === wantSuccess) return { seed, c, cb, r };
   }
   throw new Error('no seed found');
@@ -334,76 +415,68 @@ test('Lucky attempt: rolls the right dice (Luck 8 → one d20)', () => {
 });
 test('Lucky attempt success: the hit is multiplied (×2 for one lucky number)', () => {
   const { c, cb, r } = findLucky(true);
-  const plain = C.submitAction(c, { ...cb, current: { ...cb.current, fortune: { open: false } } }, { action: 'attack', target: 'left' });
-  eq(12 - r.combat.enemy.stamina.STR, 2 * (12 - plain.combat.enemy.stamina.STR));
+  const plain = C.submitAction(c, { ...cb, current: { ...cb.current, fortune: { open: false } } }, { action: 'attack', target: 'right' });
+  eq(WOLF.STR - r.combat.enemy.stamina.STR, 2 * (WOLF.STR - plain.combat.enemy.stamina.STR));
 });
 test('Lucky attempt failure: the enemy gets a free attack and you become Off-Balance', () => {
   const { c, r } = findLucky(false);
-  eq(r.character.attrs.AGI.stamina, 6 - 3 - 3, 'claws on the legs, then a free claws attack');
+  eq(totalStamina(c) - totalStamina(r.character), 6, 'two claw hits of 3');
   ok(r.combat.player.conditions.some(x => x.id === 'offBalance'), 'Off-Balance');
 });
-test('Lucky attempt: does nothing without an opening, and the opening is used up', () => {
+test('Lucky attempt: does nothing without an opening', () => {
   const s = fight();
   const r = C.submitAction(s.c, s.cb, { action: 'attack', target: 'left', lucky: true });
   ok(!r.lines.some(l => l.includes('d20')), 'no dice without an opening');
-  const { r: used } = findLucky(true);
-  ok(used.combat.exchange === 2, 'next exchange');
-});
-test('Same seed and same choices replay the same fight', () => {
-  const run = () => simulateFight({ seed: 77, policy: learnedPolicy, clashPick: learnedClash });
-  eq(JSON.stringify(run().combat.log), JSON.stringify(run().combat.log));
 });
 
 // --- Durability, defeat, fatigue ----------------------------------------------------------------
 
 test('Durability: a Block wears your weapon, a hit wears the armor on that slot, a Clank wears your weapon', () => {
-  const b = act(fight(), { action: 'block', target: 'legs' });
-  eq(b.c.durability.sword, 19);
-  let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'pray' });  // w3 claws right
-  const hit = act(s, { action: 'pray' });
-  eq(hit.c.durability.leatherJerkin, 19);
-  holdDagger(s);
-  eq(act(s, { action: 'attack', target: 'left' }).c.durability.dagger, 19);
+  eq(act(fight(), { action: 'block', target: 'legs' }).c.durability.sword, 19);
+  let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'block', target: 'left' });  // w3 claws right
+  eq(act(s, { action: 'pray' }).c.durability.leatherJerkin, 19);
+  eq(act(holdDagger(s), { action: 'attack', target: 'left' }).c.durability.dagger, 19);
 });
 test('Victory when all four of its pools reach 0', () => {
-  const s = act(fight(), { action: 'pray' });   // w2 bite
+  const s = act(fight(), { action: 'pray' });
   s.cb.enemy.stamina = { STR: 2, AGI: 0, WIS: 0, FAI: 0 };
-  const r = act(s, { action: 'attack', target: 'legs' });
-  eq(r.cb.outcome, 'victory');
+  eq(act(s, { action: 'attack', target: 'legs' }).cb.outcome, 'victory');
 });
 test('Defeat when all four of your pools reach 0', () => {
   const s = fight();
-  s.c.attrs.STR.stamina = 0; s.c.attrs.AGI.stamina = 2; s.c.attrs.WIS.stamina = 0; s.c.attrs.FAI.stamina = 0;
+  Object.assign(s.c.attrs.STR, { stamina: 0 }); s.c.attrs.AGI.stamina = 2; s.c.attrs.WIS.stamina = 0; s.c.attrs.FAI.stamina = 0;
   eq(act(s, { action: 'pray' }).cb.outcome, 'defeat');
 });
 test('After the fight: combat fatigue by the attributes you used', () => {
   let s = fight();
-  s = act(s, { action: 'block', target: 'legs' });   // WIS
-  s = act(s, { action: 'pray' });                    // FAI
-  s = act(s, { action: 'attack', target: 'head' });  // STR
-  s = act(s, { action: 'block', target: 'legs' });   // WIS
-  s = act(s, { action: 'block', target: 'right' });  // WIS
+  for (const m of [{ action: 'block', target: 'legs' }, { action: 'pray' }, { action: 'attack', target: 'head' },
+                   { action: 'block', target: 'legs' }, { action: 'block', target: 'right' }]) s = act(s, m);
   eq(s.cb.player.usage, { STR: 1, AGI: 0, WIS: 3, FAI: 1 });
-  const f = C.finishCombat(practiceFighter(), s.cb);
-  eq(f.fatigue, { STR: 1, AGI: 0, WIS: 2, FAI: 1 });
+  eq(C.finishCombat(practiceFighter(), s.cb).fatigue, { STR: 1, AGI: 0, WIS: 2, FAI: 1 });
+});
+test('Same seed and same choices replay the same fight, feints included', () => {
+  const run = () => {
+    const rng = createRng(5);
+    return simulateFight({ seed: 77, policy: randomPolicy(rng), clashPick: randomClash(rng) }).combat.log;
+  };
+  eq(JSON.stringify(run()), JSON.stringify(run()));
 });
 
-// --- Fight length and learning --------------------------------------------------------------------
+// --- Balance (slow: run on a computer with node tests/run-node.js) ---------------------------
 
-test('Balance: a player who has learned the pattern beats the werewolf in a few minutes of exchanges', () => {
-  const results = [];
-  for (let seed = 1; seed <= 40; seed++) results.push(simulateFight({ seed, policy: learnedPolicy, clashPick: learnedClash }));
-  const wins = results.filter(r => r.outcome === 'victory');
-  ok(wins.length >= 36, `wins ${wins.length} of 40`);
-  const avg = wins.reduce((s, r) => s + r.exchanges, 0) / wins.length;
-  ok(avg >= 10 && avg <= 40, `average ${avg.toFixed(1)} exchanges`);
-});
-test('Balance: learning the pattern makes the fight much easier than random play', () => {
-  let learnedWins = 0, randomWins = 0;
-  for (let seed = 1; seed <= 40; seed++) {
-    if (simulateFight({ seed, policy: learnedPolicy, clashPick: learnedClash }).outcome === 'victory') learnedWins++;
-    const rng = createRng(seed * 31);
-    if (simulateFight({ seed, policy: randomPolicy(rng), clashPick: randomClash(rng) }).outcome === 'victory') randomWins++;
-  }
-  ok(learnedWins - randomWins >= 15, `learned ${learnedWins}, random ${randomWins}`);
-});
+for (const enemyId of ['werewolf', 'barrowKnight']) {
+  slowTest(`Balance (${enemyId}): a player who knows the pattern wins about 7 fights in 12; random buttons almost never win`, () => {
+    const N = 150;
+    let learned = 0, random = 0, length = 0;
+    for (let seed = 1; seed <= N; seed++) {
+      const r = simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash });
+      if (r.outcome === 'victory') learned++;
+      length += r.exchanges;
+      const rng = createRng(seed * 7919);
+      if (simulateFight({ seed, enemyId, policy: randomPolicy(rng), clashPick: randomClash(rng) }).outcome === 'victory') random++;
+    }
+    ok(learned / N >= 0.45 && learned / N <= 0.72, `learned wins ${(100 * learned / N).toFixed(0)}% (expect ~58%; full check: node tests/balance.js)`);
+    ok(random / N < 0.1, `random wins ${(100 * random / N).toFixed(0)}%`);
+    ok(length / N >= 10 && length / N <= 20, `average ${(length / N).toFixed(1)} exchanges`);
+  });
+}

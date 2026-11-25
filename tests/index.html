@@ -43,12 +43,19 @@
   import './rules.test.js';
   import './combat.test.js';
 
-  const results = await runAll();
+  const all = await runAll({ includeSlow: false });
+  const skipped = all.filter(r => r.skipped);
+  const results = all.filter(r => !r.skipped);
   const failed = results.filter(r => !r.pass);
   const summary = document.getElementById('summary');
   summary.textContent = failed.length === 0
     ? `All ${results.length} tests passed.`
     : `${failed.length} of ${results.length} tests FAILED.`;
+  if (skipped.length) {
+    const note = document.createElement('p');
+    note.textContent = `${skipped.length} slow balance tests (hundreds of simulated fights) run on a computer only.`;
+    summary.after(note);
+  }
   if (failed.length) summary.classList.add('bad');
 
   const list = document.getElementById('list');

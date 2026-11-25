@@ -10,7 +10,7 @@ The game is a text-first, four-option RPG for mobile (playable on desktop) in a 
 - **One Almighty God.** Lesser spiritual beings exist beneath Him, some loyal and some fallen, in the spirit of C.S. Lewis, Brian Godawa, and Michael Heiser. Miracles are prayers God answers, not spells a character owns.
 - **Giant-kin enemies** (the Nephilim idea) appear under a name still to be created.
 - **Information, not certainty:** attributes and traits improve the clues a player gets, never the correctness of their choice. The single exception is the Prophet's Foretell miracle.
-- **Enemies are deterministic:** each follows a learnable behavior pattern. Rare titled elites adapt to the player, but never randomly.
+- **Enemies follow learnable patterns, with feints:** each enemy runs through a pattern of moves in order. At every step it usually makes the step's main move, but sometimes feints: it makes a different move that begins with the same first clue. The second clue gives the feint away, so characters who perceive more clues (higher WIS + FAI, or more Luck) can read feints, and others must guess. Enemies also punish repetition: repeating the same action at the same target two exchanges running draws a counter. Rare titled elites adapt to the player further.
 
 ## Attributes, stamina, and Luck
 
@@ -49,7 +49,7 @@ Four attributes (STR, AGI, WIS, FAI) double as stamina, and Luck is calculated f
 
 **Keeping every ability useful**
 
-- **Predictable:** using the same action two exchanges in a row gives the enemy an extra clue against you and Advantage on its next Block.
+- **Predictable:** using the same action at the same target two exchanges in a row lets the enemy read your rhythm: its next move is a counter, a fast attack with Advantage aimed where you aren't guarding.
 - **Cooldowns:** most abilities recover after one or two exchanges, so none can be used every exchange.
 - **Resistances and weaknesses:** enemies resist or are weak to particular attributes (armored soldiers resist STR, spirits resist steel but break under FAI, constructs ignore WIS, beasts are weak to AGI).
 - **Fatigue:** a fight fought with one attribute drains that attribute afterward, so spreading actions out keeps a character healthy.

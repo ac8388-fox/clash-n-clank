@@ -37,7 +37,7 @@ Plain HTML, CSS, and JavaScript with no build step or dependencies, mobile-first
 
 - One `state` object is the single source of truth; screens only read it and call engine functions.
 - Engine functions are pure where possible (state in, state out), so rules can be unit-tested without the UI.
-- The only randomness is in race and occupation offers, Prayer's TPT, Fortune openings, and lucky dice. All of it goes through one seeded random function so a run can be replayed.
+- The only randomness is in race and occupation offers, Prayer's TPT, Fortune openings, lucky dice, enemy feints (main move or feint at each pattern step), and where an enemy's counter aims. All of it goes through one seeded random function so a run can be replayed.
 - Autosave to local storage after every event and every exchange.
 - A **Display** setting switches between the Text and Graphic versions of every screen.
 
@@ -125,21 +125,25 @@ All content is data, and the engine never hard-codes a race, enemy, or event. At
 
 ```js
 { id, name, art, attrs: { STR, AGI, WIS, FAI }, weapons: [...], armor,
-  resist: { STR: 1 }, weak: { FAI: 2 },     // damage multipliers
-  pattern: [ /* see Enemy patterns */ ], captionFor: { tellId: 'Its eyes drop to your legs.' } }
+  resist: { STR: 0.5 }, weak: { FAI: 2 },   // damage multipliers
+  damageBonus: 1,                           // added to every hit it lands
+  feintChance: 0.4,                         // how often it feints instead of its main move
+  pattern: [ /* see Enemy patterns */ ], tellText: { eyesLegs: 'Its eyes are on your legs' } }
 ```
 
-**Enemy pattern step** (deterministic, read in order and looping)
+**Enemy pattern step** (read in order and looping; each step has a main move and feints)
 
 ```js
-{ tells: ['growlLeft', 'eyesLegs'],       // what the player can perceive
-  action: 'attack', weapon: 'claws', target: 'legs',
-  when: 'default' | 'afterBlocked' | 'below50' }  // optional condition that jumps to this step
+{ first: 'eyesLegs', caption: 'Its eyes drop to your legs.',   // shared by every variant
+  when: 'default' | 'afterBlocked' | 'below50',              // optional condition that jumps to this step
+  variants: [                                                // [0] is the main move, the rest are feints
+    { second: 'shoulderDrops', action: 'attack', weapon: 'claws', target: 'legs', clash: 'legs' },
+    { second: 'growlLeft',     action: 'attack', weapon: 'claws', target: 'left', clash: 'left' } ] }
 ```
 
 ## Rules engine
 
-These are the formulas and starting numbers to code. Everything is deterministic except the five random sources named in the tech approach.
+These are the formulas and starting numbers to code. Everything is deterministic except the random sources named in the tech approach.
 
 **Advantage without rolls.** Since nothing rolls, Advantage and Disadvantage change outcomes directly:
 
@@ -161,13 +165,13 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Empty stamina | While a pool is 0, each action using it lowers that attribute's Natural total by 1 |
 | Defeat | All four pools at 0 |
 | Luck | \|STR − AGI\| + \|WIS − FAI\| on Natural + Class, plus race modifier and unique gear; never below race starting Luck |
-| Clues shown | 1, +1 per 15 of (WIS + FAI) total, +1 at Luck 10, +1 at Luck 30; at most the step's number of tells; one fewer at Night |
+| Clues shown | 1, +1 per 15 of (WIS + FAI) total, +1 at Luck 10, +1 at Luck 30; at most the step's number of tells (2: the shared first clue, then the clue that tells the main move from a feint); one fewer at Night |
 | Fortune opening | Seeded chance per exchange or trial: 5% + Luck%, capped at 50% (Explorer: always) |
 | Lucky dice | 1 + 1 per 10 Luck, max 7: d20, d12, d10, d8, d6, d4, d4 |
 | Lucky result | No lucky number: the enemy gets a free Basic Attack and you become Off-Balance. Each lucky number adds ×1 to the multiplier (1 = ×2, 2 = ×3) |
 | Cooldowns | Swift 1 exchange, Fair 2, Drawn 3; Mastery and racial ability once per Rest |
 | Pray | One random combat TPT (Focused, Emboldened, Steeled, Blessed, Nimble), or two if the enemy took no offensive action |
-| Predictable | Repeating the same action at the same target two exchanges running: the enemy's next Block against it is automatically correct |
+| Predictable | Repeating the same action at the same target two exchanges running: the enemy's next step is a counter, an attack with its fastest weapon and Advantage, aimed at random (never at a target you have been Blocking) |
 | Trial check | Success if the attribute's current stamina ≥ the requirement |
 | Trial failure | Damage to that attribute's stamina = requirement − stamina, minimum 2 |
 | Forced lucky attempt | When a trial's only option can't be met, the option becomes a lucky attempt |
@@ -182,12 +186,12 @@ These are the formulas and starting numbers to code. Everything is deterministic
 
 Each exchange runs the same eight steps, in this order.
 
-1. **Enemy commits.** Read the current pattern step (or jump to a step whose `when` condition is true). Its action, weapon, and target are fixed before the player chooses.
-2. **Clues.** Show as many of that step's tells as the player's clue count allows, as text in the narrative and as chips with a gaze caption above the enemy. Roll for a Fortune opening.
-3. **Player chooses.** Action (Pray, Attack, Block, Item, or an ability from the carousel), then a target (Head, Left, Right, Legs) for attacks and blocks. A long-press attaches a lucky attempt when an opening is showing.
+1. **Enemy commits.** Read the current pattern step (or jump to a step whose `when` condition is true, or to a counter if the player repeated themselves), then pick its main move or a feint with the seeded random function. Its action, weapon, and target are fixed before the player chooses.
+2. **Clues.** Show as many of that step's two tells as the player's clue count allows (first the shared clue, then the one that gives a feint away), as text in the narrative and as chips with a gaze caption above the enemy. Roll for a Fortune opening.
+3. **Player chooses.** Action (Pray, Attack, Block, Item, or an ability from the carousel), then a target (Head, Left, Right, Legs) for attacks and blocks. Tapping the Fortune star, then holding the action, attaches a lucky attempt when an opening is showing.
 4. **Order by speed.** Basic Attacks use the weapon's speed and abilities their listed speed; Hindered and Speed advantage shift one tier. The slower side takes Disadvantage.
 5. **Attacks meet.** At equal speed: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance; the same label (Left vs Left, Head vs Head) starts a Clash; Head vs Legs, or a side vs a height, don't interact.
-6. **Clash event**, if triggered. The enemy's Clash direction comes from its pattern step; the player sees clues and picks a direction. The winner gets Advantage on the next attack, and the loser becomes Off-Balance. No damage is dealt this exchange.
+6. **Clash event**, if triggered. The enemy's Clash direction comes from the move it committed to; the player sees clues and picks a direction. The winner gets Advantage on the next attack, and the loser becomes Off-Balance. No damage is dealt this exchange.
 7. **Resolve.** In speed order: Blocks covering the attacked target stop the hit; anything else deals damage (weapon tier + attribute bonus, then Advantage or Disadvantage, armor, resist or weak, overflow). A hit carrying a Stagger cancels a slower action that hasn't resolved. Apply TPTs, TNTs, and lucky multipliers or penalties.
 8. **Clean up.** Tick cooldowns, clear one-exchange conditions (Off-Balance, Hindered), advance the enemy's pattern, autosave, and check for defeat.
 
@@ -237,9 +241,13 @@ Opening the crypt starts the Barrow Knight fight at once.
 
 **Enemies**
 
+Stamina, damage bonus, and feint chance were tuned by simulating 1,200 fights per enemy (`node tests/balance.js`): a Human Fighter with Plan B who has learned the pattern should win about 7 fights in 12, and a player pressing random buttons almost never.
+
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| STR / AGI / WIS / FAI | 12 / 12 / 6 / 2 | 14 / 4 / 8 / 0 |
+| STR / AGI / WIS / FAI | 7 / 7 / 3 / 2 | 9 / 2 / 5 / 0 |
+| Damage bonus | +1 to every hit | +1 to every hit |
+| Feint chance | 39% | 40% |
 | Range | Close | Approach |
 | Weapons | Claws (Swift, Light, drains AGI); Bite (Fair, Medium, drains STR) | Greatsword (Drawn, Heavy, drains STR) |
 | Armor | None | Heavy head and body, Medium legs |
@@ -248,19 +256,22 @@ Opening the crypt starts the Barrow Knight fight at once.
 
 **Enemy patterns** (steps loop in order; a `when` jumps to that step)
 
-| Enemy | Step | Tells | Caption | Action |
-| --- | --- | --- | --- | --- |
-| Werewolf | 1 | Growl from your left; eyes on your legs | “Its eyes drop to your legs.” | Claws → Legs |
-| Werewolf | 2 (after it is Blocked) | Hackles rise; jaws open wide | “Its jaws open toward your throat.” | Bite → Head |
-| Werewolf | 3 | Circles right; ears flatten | “It circles to your right.” | Claws → Right |
-| Werewolf | 4 (the trick) | Crouches low; eyes on your legs | “It crouches, eyes on your legs.” | Bite → Head |
-| Werewolf | Below half stamina | Throws its head back | “It howls at the moon.” | Becomes Enraged |
-| Barrow Knight | 1 | Visor turns to your head; sword rises | “The visor turns to your head.” | Greatsword → Head |
-| Barrow Knight | 2 | Armor creaks on your right; weight shifts | “Its armor creaks on your right.” | Greatsword → Right |
-| Barrow Knight | 3 (after it is Blocked) | Plants its feet, blade low | “It plants its feet, blade low.” | Block → Legs |
-| Barrow Knight | 4 (the trick) | Visor turns to your head; sword rises | “The visor turns to your head.” | Greatsword → Legs |
+Every step has a shared first clue and caption, a **main** move, and one or two **feints**. The enemy makes the main move unless it feints (39% of the time for the werewolf, 40% for the knight, split evenly between a step's feints). Each move has its own second clue, so a player who perceives two clues can tell the main move from a feint; a player with one clue sees only the shared clue and must guess.
 
-Both tricks are learnable: the werewolf's crouch and the knight's every-fourth swing break the obvious read, the way *Core Rules* says normal enemies should.
+| Enemy | Step | First clue (shared) | Caption | Main move (second clue) | Feints (second clue) |
+| --- | --- | --- | --- | --- | --- |
+| Werewolf | 1 | Its eyes are on your legs | “Its eyes drop to your legs.” | Claws → Legs (its shoulder drops low) | Claws → Left (a growl from your left) |
+| Werewolf | 2 (after it is Blocked) | Its hackles rise | “Its jaws open toward your throat.” | Bite → Head (its jaws open wide) | Claws → Right (its right paw lifts) |
+| Werewolf | 3 | It circles to your right | “It circles to your right.” | Claws → Right (its ears flatten) | Bite → Legs (its head dips low); Claws → Left (its weight shifts left) |
+| Werewolf | 4 (the trick) | It crouches low | “It crouches, eyes on your legs.” | Bite → Head (its eyes flick up to your throat) | Claws → Legs (its claws dig into the earth) |
+| Werewolf | Below half stamina, once | It throws its head back | “It howls at the moon.” | Becomes Enraged (its fur bristles) | — |
+| Barrow Knight | 1 | Its visor turns to your head | “The visor turns to your head.” | Greatsword → Head (its sword rises high) | Greatsword → Left (its grip shifts to the left) |
+| Barrow Knight | 2 | Armor creaks on your right | “Its armor creaks on your right.” | Greatsword → Right (its weight shifts right) | Greatsword → Legs (its blade drops low) |
+| Barrow Knight | 3 (after it is Blocked) | It plants its feet | “It plants its feet, blade low.” | Block → Legs (its blade comes down to guard its legs) | Greatsword → Legs (it coils to swing low) |
+| Barrow Knight | 4 (the trick) | Its visor turns to your head | “The visor turns to your head.” | Greatsword → Legs (its sword rises high) | Greatsword → Head (it steps in close) |
+| Any enemy | Counter (after the player repeats the same action and target two exchanges running) | It watches your every move | “It has read your rhythm.” | Fastest weapon with Advantage, aimed at random (never at a target the player has been Blocking); the second clue names the target | — |
+
+Both tricks are learnable: the werewolf's crouch and the knight's every-fourth swing break the obvious read, the way *Core Rules* says normal enemies should. The knight's fourth step shows exactly the same clues as its first, so only counting the swings gives it away.
 
 ## Interface implementation
 
@@ -303,7 +314,7 @@ Build in five steps, and make every step end in something that can be opened and
 | Step | Ask the tool to build | How to check it |
 | --- | --- | --- |
 | 1. Rules | A calculator page: pick a race and see its attributes, Luck, and number of lucky dice | Compare with the race table in *Core Rules*: a Halfling shows 12 Luck and 2 dice, a Dragon 4 Luck and 1 die, a Human 6 Luck and 1 die |
-| 2. Combat | A practice fight against the werewolf, with a restart button | Its clues follow the pattern table: when its eyes drop to your legs, it attacks your legs, and Blocking Legs stops the hit. A fight lasts a few minutes, not seconds and not forever |
+| 2. Combat | A practice fight against the werewolf, with a restart button | Its clues follow the pattern table: when its eyes drop to your legs, it usually attacks your legs (Blocking Legs stops the hit) but sometimes feints. A fight lasts a few minutes, not seconds and not forever |
 | 3. Trials and travel | The Crossroads with working directions, plus the Gorge and Crypt trials | Every direction leads somewhere and West becomes Camp; the time of day changes with each journey; a failed trial drains the attribute that was tried |
 | 4. Screens | Every screen styled like the mockups | Side by side with the mockups on a phone: buttons, corners, top bar, and colors match, and the Display setting switches Text and Graphic |
 | 5. Full slice | The whole loop from the title screen | Tick every item in the done checklist below |
@@ -324,10 +335,12 @@ Slice 1 is done when a new player can finish the loop on a phone without help, a
 - [ ] Travel from the Crossroads in all four directions, including Camp for the blocked West, with time advancing each journey
 - [ ] Pass and fail both trials; failure damages the right pool; the racial ability replaces the weakest option
 - [ ] Fight the werewolf and the Barrow Knight using the exchange loop, with clues and gaze captions
+- [ ] Enemies sometimes feint: the first clue is shared, and the second clue (seen only with enough WIS + FAI or Luck, and one fewer at Night) gives the feint away
+- [ ] Repeating the same action and target two exchanges running draws a counter
 - [ ] Clank, Clash, Block, Pray, Item, Plan B or Crusher, and cooldowns all behave as specified
 - [ ] Overflow follows STR, AGI, WIS, FAI; defeat at all four pools empty
 - [ ] A Fortune opening appears, a lucky attempt rolls the right dice, and both outcomes apply
-- [ ] Learning each enemy's pattern makes the fight noticeably easier on a second try
+- [ ] Learning each enemy's pattern makes the fight noticeably easier on a second try: a player who knows the patterns wins about 7 fights in 12 (55–62% in simulation), random play almost never wins, and a fight lasts about 10–20 exchanges
 - [ ] Combat fatigue, Rest, and Sleep update stamina and traits correctly
 - [ ] Menu, character sheet, and inventory open from their buttons
 - [ ] The Display setting switches between Text and Graphic versions

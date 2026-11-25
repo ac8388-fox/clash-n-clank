@@ -4,7 +4,13 @@
 const tests = [];
 
 export function test(name, fn) {
-  tests.push({ name, fn });
+  tests.push({ name, fn, slow: false });
+}
+
+// Slow tests (hundreds of simulated fights) run only on a computer, so the
+// test page stays quick on a phone.
+export function slowTest(name, fn) {
+  tests.push({ name, fn, slow: true });
 }
 
 export function eq(actual, expected, label = '') {
@@ -22,9 +28,10 @@ export function throws(fn, label = 'expected an error') {
   throw new Error(label);
 }
 
-export async function runAll() {
+export async function runAll({ includeSlow = true } = {}) {
   const results = [];
   for (const t of tests) {
+    if (t.slow && !includeSlow) { results.push({ name: t.name, pass: true, skipped: true }); continue; }
     try { await t.fn(); results.push({ name: t.name, pass: true }); }
     catch (e) { results.push({ name: t.name, pass: false, error: e.message }); }
   }

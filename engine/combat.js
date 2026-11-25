@@ -1,8 +1,10 @@
 // The combat exchange loop (Build Spec → "Combat resolution").
 //
 // Each exchange runs eight steps:
-//   1. Enemy commits     – beginExchange()
-//   2. Clues + Fortune   – beginExchange()
+//   1. Enemy commits     – beginExchange(): picks the pattern step, then the
+//                          main action or a feint (seeded random)
+//   2. Clues + Fortune   – beginExchange(): the shared first clue, then the
+//                          variant's second clue if the player perceives it
 //   3. Player chooses    – submitAction()
 //   4. Order by speed    – submitAction()
 //   5. Attacks meet      – submitAction()  (Clank, Clash, or no interaction)
@@ -11,11 +13,15 @@
 //   8. Clean up          – cleanup(), then the next exchange begins
 // After the fight, finishCombat() applies combat fatigue.
 //
-// Like the rules engine, every function returns new objects and never
-// changes what it was given. Randomness (Fortune openings, lucky dice, Pray)
-// goes through the seeded generator stored in combat.rngState.
+// Repetition: if the player uses the same action and target two exchanges
+// running, the enemy's next step is a counter: a fast attack with Advantage,
+// aimed where the player isn't guarding.
+//
+// Every function returns new objects and never changes what it was given.
+// Randomness (feints, counter aim, Fortune openings, lucky dice, Pray) goes
+// through the seeded generator stored in combat.rngState.
 
-import { getEnemy } from '../data/enemies.js';
+import { getEnemy, COUNTER } from '../data/enemies.js';
 import { getAbility } from '../data/abilities.js';
 import { getWeapon, ARMOR, CONSUMABLES } from '../data/items.js';
 import { TRAITS, PRAY_TPTS } from '../data/traits.js';
@@ -44,6 +50,72 @@ export function speedName(rank) {
   if (rank < 0) return 'Drawn−';
   if (rank > 2) return 'Swift+';
   return SPEED_NAME[rank];
+}
+
+// ---------------------------------------------------------------------------
+// Pattern steps, feints, and the counter
+// ---------------------------------------------------------------------------
+
+export function loopSteps(enemy) {
+  return enemy.pattern.filter(s => s.when !== 'below50');
+}
+
+// The counter step: a fast attack with Advantage. After repeated Blocks it
+// aims anywhere except the target being guarded; otherwise anywhere.
+export function counterStep(enemy, repeated) {
+  const weapon = enemy.weapons.map(getWeapon).sort((a, b) => SPEED_RANK[b.speed] - SPEED_RANK[a.speed])[0];
+  const targets = repeated.action === 'block' ? TARGETS.filter(t => t !== repeated.target) : TARGETS;
+  return {
+    id: 'counter',
+    when: 'counter',
+    first: 'counter',
+    caption: COUNTER.caption,
+    evenOdds: true,
+    variants: targets.map(t => ({
+      id: 'counter-' + t, second: 'counter-' + t,
+      action: 'attack', weapon: weapon.id, target: t, clash: t, advantage: true,
+    })),
+  };
+}
+
+// The step the enemy is on this exchange (a pattern step or a counter).
+export function stepFor(combat) {
+  if (combat.current.counter) return combat.current.counter;
+  return getEnemy(combat.enemyId).pattern.find(s => s.id === combat.current.stepId);
+}
+
+// The move the enemy committed to this exchange.
+export function moveFor(combat) {
+  return stepFor(combat).variants.find(v => v.id === combat.current.variantId);
+}
+
+// How likely each variant of a step is: the main action, then the feints.
+export function variantOdds(enemy, step) {
+  const n = step.variants.length;
+  if (n === 1) return [1];
+  if (step.evenOdds) return step.variants.map(() => 1 / n);
+  const f = enemy.feintChance;
+  return step.variants.map((_, i) => (i === 0 ? 1 - f : f / (n - 1)));
+}
+
+// The words for a clue.
+export function tellText(enemy, id) {
+  if (id === 'counter') return COUNTER.first;
+  if (id.startsWith('counter-')) return COUNTER.second[id.slice(8)];
+  return enemy.tellText[id];
+}
+
+// Both clues of a variant, in order: the shared first clue, then its own.
+export function variantTells(enemy, step, variant) {
+  return [tellText(enemy, step.first), tellText(enemy, variant.second)];
+}
+
+// For tests and simulations: the same combat with the enemy committed to a
+// particular variant of its current step.
+export function withVariant(combat, variantId) {
+  const cb = clone(combat);
+  cb.current.variantId = variantId;
+  return cb;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,14 +160,6 @@ function netModifier(adv, dis) {
 function damageText(applied) {
   if (applied.length === 0) return 'No effect.';
   return applied.map(a => `−${a.amount} ${a.attr}`).join(', ') + '.';
-}
-
-export function loopSteps(enemy) {
-  return enemy.pattern.filter(s => s.when !== 'below50');
-}
-
-function stepById(enemy, id) {
-  return enemy.pattern.find(s => s.id === id);
 }
 
 // The weapon in hand. If it is broken, switch to the next usable ready weapon.
@@ -162,7 +226,7 @@ export function startCombat(character, enemyId, { seed = 1, timeOfDay = 'Morning
       conditions: [],
       advantageNext: false,      // won a Clash: Advantage on the next attack
       speedPenaltyNext: false,   // Plan B: next action has a Speed disadvantage
-      history: [],               // [{ action, target }] for Predictable
+      history: [],               // [{ action, target }] for repetition
       usage: { STR: 0, AGI: 0, WIS: 0, FAI: 0 },  // for combat fatigue
     },
     enemy: {
@@ -190,16 +254,23 @@ export function beginExchange(character, combatIn) {
   const c = clone(character);
   const enemy = getEnemy(combat.enemyId);
   const E = combat.enemy;
+  const P = combat.player;
   const loop = loopSteps(enemy);
   const rng = createRng(combat.rngState);
   combat.exchange += 1;
 
-  // 1. Enemy commits: a `when` condition can jump to its step.
+  // 1. Enemy commits. In order of priority: the once-only below-half step,
+  //    a counter to repetition, the after-Blocked jump, then the loop.
   let step = null;
+  let counter = null;
   const below = enemy.pattern.find(s => s.when === 'below50');
+  const h = P.history;
   if (below && !E.enrageUsed && sum(E.stamina) < sum(E.totals) / 2) {
     step = below;
     E.enrageUsed = true;
+  } else if (h.length >= 2 && isPredictable(h)) {
+    counter = counterStep(enemy, h[h.length - 1]);
+    step = counter;
   } else if (E.wasBlocked) {
     const jump = loop.find(s => s.when === 'afterBlocked');
     if (jump && jump.id !== E.lastStepId) {
@@ -210,16 +281,23 @@ export function beginExchange(character, combatIn) {
   if (!step) step = loop[E.loopIndex];
   E.wasBlocked = false;
 
-  // 2. Clues: how many of the step's tells the player perceives.
+  // Main action or feint, by the seeded random function.
+  const odds = variantOdds(enemy, step);
+  let r = rng.next(), pick = 0;
+  while (pick < odds.length - 1 && r >= odds[pick]) { r -= odds[pick]; pick++; }
+  const variant = step.variants[pick];
+
+  // 2. Clues: the shared first clue, then the variant's second clue.
   const totals = attrTotals(c);
   const luck = luckOf(c);
   let extra = 0;
   if (hasTrait(c, 'focused')) extra += 1;
   if (hasTrait(c, 'dazed')) extra -= 1;
   if (E.enraged) extra -= 1;
+  const all = variantTells(enemy, step, variant);
   const clueCount = cluesShown({
     wisTotal: totals.WIS, faiTotal: totals.FAI, luck,
-    tellCount: step.tells.length, night: combat.timeOfDay === 'Night', extra,
+    tellCount: all.length, night: combat.timeOfDay === 'Night', extra,
   });
 
   const fortuneOpen = rollFortune(luck, rng);
@@ -227,9 +305,11 @@ export function beginExchange(character, combatIn) {
 
   combat.current = {
     stepId: step.id,
+    variantId: variant.id,
+    counter,
     caption: step.caption,
-    tells: step.tells.slice(0, clueCount).map(t => enemy.tellText[t]),
-    tellCount: step.tells.length,
+    tells: all.slice(0, clueCount),
+    tellCount: all.length,
     usedFocus: hasTrait(c, 'focused'),
     fortune: { open: fortuneOpen, hint },
   };
@@ -269,7 +349,8 @@ export function submitAction(characterIn, combatIn, choice) {
   let c = clone(characterIn);
   const cb = clone(combatIn);
   const enemy = getEnemy(cb.enemyId);
-  const step = stepById(enemy, cb.current.stepId);
+  const step = stepFor(cb);
+  const mv = moveFor(cb);
   const P = cb.player;
   const E = cb.enemy;
   const k = cb.exchange;
@@ -326,8 +407,8 @@ export function submitAction(characterIn, combatIn, choice) {
   P.speedPenaltyNext = false;
 
   let eSpeed = null;
-  if (step.action === 'attack') eSpeed = SPEED_RANK[getWeapon(step.weapon).speed];
-  else if (step.action === 'enrage') eSpeed = SPEED_RANK.Fair;
+  if (mv.action === 'attack') eSpeed = SPEED_RANK[getWeapon(mv.weapon).speed];
+  else if (mv.action === 'enrage') eSpeed = SPEED_RANK.Fair;
   if (eSpeed !== null && hasCondition(E, 'hindered')) eSpeed -= 1;
 
   const bothTimed = pSpeed !== null && eSpeed !== null;
@@ -343,23 +424,19 @@ export function submitAction(characterIn, combatIn, choice) {
   const playerAttackMod = netModifier(playerAdv, playerSlower || hasCondition(P, 'offBalance'));
   const playerBlockMod = netModifier(false, hasCondition(P, 'offBalance'));
   let enemyAdv = false;
-  if (step.action === 'attack') { enemyAdv = E.advantageNext; E.advantageNext = false; }
+  if (mv.action === 'attack') { enemyAdv = E.advantageNext || !!mv.advantage; E.advantageNext = false; }
   const enemyAttackMod = netModifier(enemyAdv, enemySlower || hasCondition(E, 'offBalance'));
   const enemyBlockMod = netModifier(false, hasCondition(E, 'offBalance'));
 
-  // Predictable: repeating the same attack at the same target two exchanges
-  // running means the enemy's Block against it is automatically correct.
-  const entry = { action: action === 'ability' ? 'ability:' + ability.id : action, target: targeted ? choice.target : null };
-  const readsYou = isAttack && isPredictable([...P.history, entry]);
-  P.history.push(entry);
+  P.history.push({ action: action === 'ability' ? 'ability:' + ability.id : action, target: targeted ? choice.target : null });
 
-  const ctx = { c, cb, enemy, step, ability, entry, lines, rng, lucky };
+  const ctx = { c, cb, enemy, step, mv, ability, lines, rng, lucky };
 
   // --- 5. Attacks meet (equal speed) ----------------------------------------
-  if (isAttack && step.action === 'attack' && !readsYou && pSpeed === eSpeed) {
-    const meet = attacksMeet(choice.target, step.target);
+  if (isAttack && mv.action === 'attack' && pSpeed === eSpeed) {
+    const meet = attacksMeet(choice.target, mv.target);
     if (meet === 'clank') {
-      lines.push(`Clank! Your ${weapon.name.toLowerCase()} meets its ${step.weapon}. You are both Off-Balance.`);
+      lines.push(`Clank! Your ${weapon.name.toLowerCase()} meets its ${mv.weapon}. You are both Off-Balance.`);
       c.durability = wearItem(c.durability, c.gear.ready[P.weaponIndex]);
       playerGainsTNT(c, cb, 'offBalance', lines);
       addCondition(E, 'offBalance', k);
@@ -369,7 +446,7 @@ export function submitAction(characterIn, combatIn, choice) {
     if (meet === 'clash') {
       lines.push('CLASH! Your attacks meet. Read its next move and pick a direction.');
       cb.pendingClash = {
-        enemyDir: step.clash || step.target,
+        enemyDir: mv.clash || mv.target,
         caption: step.caption,
         tells: cb.current.tells,
         abilityId: ability ? ability.id : null,
@@ -384,7 +461,7 @@ export function submitAction(characterIn, combatIn, choice) {
   // --- 7. Resolve, in speed order ------------------------------------------
   const actors = [];
   if (action !== 'block') actors.push({ side: 'player', speed: pSpeed });
-  if (step.action === 'attack' || step.action === 'enrage') actors.push({ side: 'enemy', speed: eSpeed });
+  if (mv.action === 'attack' || mv.action === 'enrage') actors.push({ side: 'enemy', speed: eSpeed });
   actors.sort((a, b) => b.speed - a.speed);
 
   const canceled = new Set();
@@ -396,14 +473,14 @@ export function submitAction(characterIn, combatIn, choice) {
     for (const a of group) {
       if (canceled.has(a.side)) continue;
       if (a.side === 'player' && !playerDown) {
-        resolvePlayer(ctx, { action, weapon, ability, target: choice.target, readsYou,
-                             playerAttackMod, enemyBlockMod, enemyOffensive: step.action === 'attack' });
+        resolvePlayer(ctx, { action, weapon, ability, target: choice.target,
+                             playerAttackMod, enemyBlockMod, enemyOffensive: mv.action === 'attack' });
       }
-      if (a.side === 'enemy' && !enemyDown && step.action === 'enrage') {
+      if (a.side === 'enemy' && !enemyDown && mv.action === 'enrage') {
         E.enraged = true;
         lines.push('It howls at the moon. It is Enraged!');
       } else if (a.side === 'enemy' && !enemyDown) {
-        const staggered = resolveEnemy(ctx, { weaponId: step.weapon, target: step.target, enemyAttackMod,
+        const staggered = resolveEnemy(ctx, { weaponId: mv.weapon, target: mv.target, enemyAttackMod,
                                               playerBlocking: action === 'block' ? choice.target : null, playerBlockMod });
         if (staggered) for (const b of actors.slice(i + group.length)) if (b.side === 'player') canceled.add('player');
       }
@@ -415,8 +492,8 @@ export function submitAction(characterIn, combatIn, choice) {
   if (lucky && !lucky.success && !isDefeated(E.stamina) && !isDefeated(staminaOf(ctx.c))) {
     lines.push('It seizes the opening!');
     resolveEnemy(ctx, {
-      weaponId: step.action === 'attack' ? step.weapon : enemy.weapons[0],
-      target: step.target || 'left',
+      weaponId: mv.action === 'attack' ? mv.weapon : enemy.weapons[0],
+      target: mv.target || 'left',
       enemyAttackMod: null,
       playerBlocking: action === 'block' ? choice.target : null,
       playerBlockMod,
@@ -428,32 +505,28 @@ export function submitAction(characterIn, combatIn, choice) {
 }
 
 function resolvePlayer(ctx, o) {
-  const { cb, enemy, step, lines, lucky } = ctx;
-  const P = cb.player, E = cb.enemy;
+  const { cb, enemy, mv, lines, lucky } = ctx;
+  const E = cb.enemy;
   const mult = lucky && lucky.success ? lucky.multiplier : 1;
 
   if (o.action === 'attack' || o.action === 'ability') {
     const what = o.ability ? `${o.ability.name} (${o.weapon.name.toLowerCase()})` : `your ${o.weapon.name.toLowerCase()}`;
-    if (o.readsYou) {
-      lines.push(`It reads the repeat and blocks ${what}.`);
-    } else {
-      let dmg = computeHit({
-        weapon: o.weapon, totals: attrTotals(ctx.c), modifier: o.playerAttackMod,
-        armorWeight: enemy.armor[SLOT_FOR[o.target]], resistWeak: damageMultiplier(enemy, o.weapon.drains),
-        abilityMultiplier: o.ability && o.ability.multiplier ? o.ability.multiplier : 1, luckyMultiplier: mult,
-      });
-      if (step.action === 'block' && step.target === o.target) {
-        const br = blockResult(dmg, o.enemyBlockMod);
-        dmg = br.taken;
-        if (dmg === 0) lines.push(`It blocks ${what}.`);
-      }
-      if (dmg > 0) {
-        const r = applyDamage(E.stamina, o.weapon.drains, dmg);
-        E.stamina = r.stamina;
-        const verb = PLAYER_VERB[o.weapon.id] || 'hits';
-        const subject = o.ability ? `${o.ability.name}: your ${o.weapon.name.toLowerCase()}` : `Your ${o.weapon.name.toLowerCase()}`;
-        lines.push(`${subject} ${verb} ${ENEMY_PART[o.target]}. ${damageText(r.applied)}`);
-      }
+    let dmg = computeHit({
+      weapon: o.weapon, totals: attrTotals(ctx.c), modifier: o.playerAttackMod,
+      armorWeight: enemy.armor[SLOT_FOR[o.target]], resistWeak: damageMultiplier(enemy, o.weapon.drains),
+      abilityMultiplier: o.ability && o.ability.multiplier ? o.ability.multiplier : 1, luckyMultiplier: mult,
+    });
+    if (mv.action === 'block' && mv.target === o.target) {
+      const br = blockResult(dmg, o.enemyBlockMod);
+      dmg = br.taken;
+      if (dmg === 0) lines.push(`It blocks ${what}.`);
+    }
+    if (dmg > 0) {
+      const r = applyDamage(E.stamina, o.weapon.drains, dmg);
+      E.stamina = r.stamina;
+      const verb = PLAYER_VERB[o.weapon.id] || 'hits';
+      const subject = o.ability ? `${o.ability.name}: your ${o.weapon.name.toLowerCase()}` : `Your ${o.weapon.name.toLowerCase()}`;
+      lines.push(`${subject} ${verb} ${ENEMY_PART[o.target]}. ${damageText(r.applied)}`);
     }
     if (o.ability) afterAbility(ctx);
     return;
@@ -507,6 +580,7 @@ function resolveEnemy(ctx, o) {
     weapon, totals: E.totals, modifier: o.enemyAttackMod,
     armorWeight: playerArmorWeight(ctx.c, o.target),
   });
+  dmg += enemy.damageBonus || 0;
   if (E.enraged) dmg += 1;
 
   const verb = ENEMY_VERB[weapon.id] || 'hits';
@@ -545,10 +619,10 @@ export function submitClash(characterIn, combatIn, direction) {
   const c = clone(characterIn);
   const cb = clone(combatIn);
   const enemy = getEnemy(cb.enemyId);
-  const step = stepById(enemy, cb.current.stepId);
   const pc = cb.pendingClash;
   const lines = [];
-  const ctx = { c, cb, enemy, step, ability: pc.abilityId ? getAbility(pc.abilityId) : null,
+  const ctx = { c, cb, enemy, step: stepFor(cb), mv: moveFor(cb),
+                ability: pc.abilityId ? getAbility(pc.abilityId) : null,
                 lines, rng: createRng(cb.rngState), lucky: pc.lucky };
   cb.pendingClash = null;
 
@@ -572,7 +646,7 @@ export function submitClash(characterIn, combatIn, direction) {
 
 function cleanup(ctx) {
   const { cb, enemy, step, ability, lines, rng } = ctx;
-  let c = ctx.c;
+  const c = ctx.c;
   const E = cb.enemy, P = cb.player;
   const k = cb.exchange;
 
@@ -582,8 +656,9 @@ function cleanup(ctx) {
   P.conditions = P.conditions.filter(x => x.until > k);
   E.conditions = E.conditions.filter(x => x.until > k);
 
+  // Pattern steps advance the loop; a counter or the howl leaves it where it was.
   const loop = loopSteps(enemy);
-  const idx = loop.indexOf(step);
+  const idx = loop.findIndex(s => s.id === step.id);
   if (idx >= 0) E.loopIndex = (idx + 1) % loop.length;
   E.lastStepId = step.id;
 
