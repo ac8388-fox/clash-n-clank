@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Race Calculator – Clash n' Clank</title>
+<style>
+  @font-face {
+    font-family: 'VT323';
+    src: url('assets/fonts/VT323-Regular.ttf') format('truetype');
+    font-display: swap;
+  }
+  :root {
+    --black: #000; --white: #fff; --blue: #5BC8F5; --red: #E5383B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--black); color: var(--white); }
+  body {
+    font-family: 'VT323', ui-monospace, Menlo, Consolas, monospace;
+    font-size: 22px; line-height: 1.15;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    max-width: 430px; margin: 0 auto;
+  }
+  h1 { font-size: 34px; font-weight: normal; margin: 4px 0 2px; letter-spacing: 1px; }
+  .sub { margin: 0 0 16px; opacity: .8; }
+  .box {
+    border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue);
+    background: var(--black);
+  }
+  .races { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+  .races button {
+    font: inherit; color: var(--white); background: var(--black);
+    border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue);
+    padding: 10px 4px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .races button[aria-pressed="true"] { background: var(--white); color: var(--black); }
+  .card { padding: 14px 14px 16px; margin-bottom: 18px; }
+  .card h2 { font-size: 30px; font-weight: normal; margin: 0 0 10px; }
+  .attrs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; margin-bottom: 14px; }
+  .attr { padding: 6px 0 8px; }
+  .attr .k { font-size: 18px; opacity: .8; }
+  .attr .v { font-size: 34px; }
+  .big { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center; }
+  .big .v { font-size: 48px; line-height: 1; }
+  .big .k { font-size: 18px; opacity: .8; }
+  .big > div { padding: 8px 0 10px; }
+  .dice { margin-top: 10px; text-align: center; color: var(--blue); }
+  .how { margin-top: 12px; font-size: 19px; opacity: .85; }
+  .fighter h3 { font-size: 22px; font-weight: normal; margin: 0 0 6px; }
+  .fighter p { margin: 0; font-size: 20px; }
+  .meta { font-size: 19px; opacity: .85; margin-top: 10px; }
+  a { color: var(--blue); }
+</style>
+</head>
+<body>
+  <h1>Race Calculator</h1>
+  <p class="sub">Tap a race to see its starting attributes, Luck, and lucky dice.</p>
+
+  <div class="races" id="races"></div>
+
+  <section class="card box" id="card" aria-live="polite"></section>
+
+  <section class="card box fighter" id="fighter"></section>
+
+  <p class="meta"><a href="tests/">See the automatic test results</a></p>
+
+<script type="module">
+  import { RACES, getRace } from './data/races.js';
+  import { calcLuck, luckyDiceCount, luckyDice, luckOf, ATTRS } from './engine/rules.js';
+  import { createCharacter } from './engine/state.js';
+
+  const racesEl = document.getElementById('races');
+  const cardEl = document.getElementById('card');
+  const fighterEl = document.getElementById('fighter');
+
+  function diceText(luck) {
+    return luckyDice(luck).map(s => 'd' + s).join(', ');
+  }
+
+  function show(raceId) {
+    const race = getRace(raceId);
+    const a = race.attrs;
+    const luck = calcLuck({ attrs: a, raceId });
+    const dice = luckyDiceCount(luck);
+
+    for (const b of racesEl.children) b.setAttribute('aria-pressed', String(b.dataset.id === raceId));
+
+    const raw = Math.abs(a.STR - a.AGI) + Math.abs(a.WIS - a.FAI);
+    let how = `Luck = |${a.STR} − ${a.AGI}| + |${a.WIS} − ${a.FAI}| = ${raw}`;
+    if (race.luckModifier) how += `, ${race.luckModifier > 0 ? '+' : '−'} ${Math.abs(race.luckModifier)} racial = ${raw + race.luckModifier}`;
+    if (luck > raw + race.luckModifier) how += `, raised to the race minimum of ${race.startingLuck}`;
+
+    cardEl.innerHTML = `
+      <h2>${race.name}</h2>
+      <div class="attrs">
+        ${ATTRS.map(k => `<div class="attr box"><div class="k">${k}</div><div class="v">${a[k]}</div></div>`).join('')}
+      </div>
+      <div class="big">
+        <div class="box"><div class="v">${luck}</div><div class="k">LUCK</div></div>
+        <div class="box"><div class="v">${dice}</div><div class="k">LUCKY ${dice === 1 ? 'DIE' : 'DICE'}</div></div>
+      </div>
+      <div class="dice">Rolls: ${diceText(luck)}</div>
+      <div class="how">${how}</div>
+      <div class="meta">Ability: ${race.ability} · Strength: ${race.positive} · Weakness: ${race.negative}</div>
+    `;
+
+    // The same race after the Fighter's +2 STR (what a new character actually starts with).
+    const c = createCharacter({ name: 'Preview', raceId, luckyNumber: 1, occupationId: 'knight' });
+    const fl = luckOf(c);
+    const fd = luckyDiceCount(fl);
+    fighterEl.innerHTML = `
+      <h3>As a Level 1 Fighter (+2 STR)</h3>
+      <p>STR ${c.attrs.STR.natural + c.attrs.STR.class} · AGI ${c.attrs.AGI.natural} · WIS ${c.attrs.WIS.natural} · FAI ${c.attrs.FAI.natural}</p>
+      <p>Luck ${fl} · ${fd} lucky ${fd === 1 ? 'die' : 'dice'} (${diceText(fl)})</p>
+    `;
+
+    try { localStorage.setItem('calculator.race', raceId); } catch {}
+  }
+
+  for (const r of RACES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = r.name;
+    b.dataset.id = r.id;
+    b.addEventListener('click', () => show(r.id));
+    racesEl.appendChild(b);
+  }
+
+  let start = 'halfling';
+  try { start = localStorage.getItem('calculator.race') || start; } catch {}
+  show(RACES.some(r => r.id === start) ? start : 'halfling');
+</script>
+</body>
+</html>

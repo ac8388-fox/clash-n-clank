@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test Results – Clash n' Clank</title>
+<style>
+  @font-face {
+    font-family: 'VT323';
+    src: url('../assets/fonts/VT323-Regular.ttf') format('truetype');
+    font-display: swap;
+  }
+  :root { --black: #000; --white: #fff; --blue: #5BC8F5; --red: #E5383B; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--black); color: var(--white); }
+  body {
+    font-family: 'VT323', ui-monospace, Menlo, Consolas, monospace;
+    font-size: 20px; line-height: 1.2;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    max-width: 640px; margin: 0 auto;
+  }
+  h1 { font-size: 34px; font-weight: normal; margin: 4px 0 12px; }
+  .summary {
+    border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue);
+    padding: 12px; font-size: 30px; margin-bottom: 16px;
+  }
+  .summary.bad { color: var(--red); border-color: var(--red); }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 5px 0; border-bottom: 1px solid #333; overflow-wrap: anywhere; }
+  .p { color: var(--blue); }
+  .f { color: var(--red); }
+  .err { display: block; color: var(--red); padding-left: 2.2em; }
+  a { color: var(--blue); }
+</style>
+</head>
+<body>
+  <h1>Automatic Tests</h1>
+  <div class="summary" id="summary">Running…</div>
+  <ul id="list"></ul>
+  <p><a href="../calculator.html">Back to the calculator</a></p>
+<script type="module">
+  import { runAll } from './harness.js';
+  import './rules.test.js';
+
+  const results = await runAll();
+  const failed = results.filter(r => !r.pass);
+  const summary = document.getElementById('summary');
+  summary.textContent = failed.length === 0
+    ? `All ${results.length} tests passed.`
+    : `${failed.length} of ${results.length} tests FAILED.`;
+  if (failed.length) summary.classList.add('bad');
+
+  const list = document.getElementById('list');
+  for (const r of [...failed, ...results.filter(r => r.pass)]) {
+    const li = document.createElement('li');
+    li.innerHTML = r.pass
+      ? `<span class="p">PASS</span> `
+      : `<span class="f">FAIL</span> `;
+    li.append(r.name);
+    if (!r.pass) {
+      const e = document.createElement('span');
+      e.className = 'err';
+      e.textContent = r.error;
+      li.append(e);
+    }
+    list.appendChild(li);
+  }
+</script>
+</body>
+</html>

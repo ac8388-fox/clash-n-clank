@@ -1,0 +1,33 @@
+// The 28 occupations from "Core Rules" → Occupations.
+// In Slice 1 they are shown on the character sheet only.
+
+export const OCCUPATIONS = [
+  { id: 'knight',       name: 'Knight',       attr: 'STR', minor: 'Rally' },
+  { id: 'mercenary',    name: 'Mercenary',    attr: 'STR', minor: 'Size Up' },
+  { id: 'blacksmith',   name: 'Blacksmith',   attr: 'STR', minor: 'Mend' },
+  { id: 'miner',        name: 'Miner',        attr: 'STR', minor: 'Stonesense' },
+  { id: 'woodcutter',   name: 'Woodcutter',   attr: 'STR', minor: 'Fell' },
+  { id: 'porter',       name: 'Porter',       attr: 'STR', minor: 'Heavy Load' },
+  { id: 'mason',        name: 'Mason',        attr: 'STR', minor: 'Fortify' },
+  { id: 'hunter',       name: 'Hunter',       attr: 'AGI', minor: 'Track' },
+  { id: 'thief',        name: 'Thief',        attr: 'AGI', minor: 'Pilfer' },
+  { id: 'courier',      name: 'Courier',      attr: 'AGI', minor: 'Shortcut' },
+  { id: 'sailor',       name: 'Sailor',       attr: 'AGI', minor: 'Sea Legs' },
+  { id: 'acrobat',      name: 'Acrobat',      attr: 'AGI', minor: 'Tumble' },
+  { id: 'angler',       name: 'Angler',       attr: 'AGI', minor: 'Cast Line' },
+  { id: 'rider',        name: 'Rider',        attr: 'AGI', minor: 'Mounted' },
+  { id: 'scholar',      name: 'Scholar',      attr: 'WIS', minor: 'Study' },
+  { id: 'merchant',     name: 'Merchant',     attr: 'WIS', minor: 'Barter' },
+  { id: 'alchemist',    name: 'Alchemist',    attr: 'WIS', minor: 'Brew' },
+  { id: 'scribe',       name: 'Scribe',       attr: 'WIS', minor: 'Decipher' },
+  { id: 'cartographer', name: 'Cartographer', attr: 'WIS', minor: 'Chart' },
+  { id: 'physician',    name: 'Physician',    attr: 'WIS', minor: 'Treat' },
+  { id: 'jeweler',      name: 'Jeweler',      attr: 'WIS', minor: 'Appraise' },
+  { id: 'barkeep',      name: 'Barkeep',      attr: 'FAI', minor: 'Round on Me' },
+  { id: 'shepherd',     name: 'Shepherd',     attr: 'FAI', minor: 'Herd' },
+  { id: 'acolyte',      name: 'Acolyte',      attr: 'FAI', minor: 'Bless' },
+  { id: 'gravedigger',  name: 'Gravedigger',  attr: 'FAI', minor: 'Last Rites' },
+  { id: 'pilgrim',      name: 'Pilgrim',      attr: 'FAI', minor: 'Steadfast' },
+  { id: 'herbalist',    name: 'Herbalist',    attr: 'FAI', minor: 'Forage' },
+  { id: 'augur',        name: 'Augur',        attr: 'FAI', minor: 'Discern' },
+];

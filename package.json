@@ -1,0 +1,9 @@
+{
+  "name": "clash-n-clank",
+  "private": true,
+  "type": "module",
+  "description": "Clash n' Clank: a four-option RPG. Plain HTML, CSS, and JavaScript with no dependencies.",
+  "scripts": {
+    "test": "node tests/run-node.js"
+  }
+}
