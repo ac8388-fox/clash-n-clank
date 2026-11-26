@@ -42,7 +42,7 @@ Four attributes (STR, AGI, WIS, FAI) double as stamina, and Luck is calculated f
 
 **Damage and fatigue** (there is no health pool)
 
-- **Trials and events:** every option gets the player through. Meeting the requirement is a clean pass. Falling short still gets them through, but exhausts the attribute attempted (its stamina drops to 0) and leaves a negative trait: a TNT for a small shortfall, or a CNT such as Injured for a big one. When the only option's requirement can't be met, the player is forced into a lucky attempt.
+- **Trials and events:** the gap is measured against the attribute's current stamina. Meeting the requirement is a clean pass. Falling a little short (1–3) still gets the player through, but exhausts the attribute attempted (its stamina drops to 0) and leaves a TNT. Falling 4 or more short is **Lucky only**: the option can be tried only as a lucky attempt. Any lucky number is a clean pass; none means the player does not get through, the attribute drops to 0, and they gain a CNT (Injured). These are the only options that can block the player; the racial ability always passes. Since the gap uses current stamina, resting first can shrink it. A trial screen can always be left, and the world never traps the player behind one: there is a way round, or a chance to rest and return.
 - **Combat damage:** every weapon and ability carries an attribute, and its hits drain the target's stamina in that attribute, applied as the hits land. If that stamina is already 0, or a hit is bigger than what remains, the excess goes to the leftmost pool that still has stamina, in the order STR, AGI, WIS, FAI, so Faith is always the last to fall. A character is defeated when all four stamina pools reach 0.
 - **Combat fatigue:** combat actions cost nothing in the moment. After the fight, stamina drops in proportion to the attributes the character actually used (a mostly-Faith fight drains Faith), on top of any damage taken.
 - **Empty stamina:** stamina is the current pool out of the attribute's total (12/36 means 12 stamina of a 36 total). While an attribute's stamina sits at 0, each action using it lowers that total by 1, and the stamina stays at 0. Lost points come off the Natural layer, so Luck recalculates (never below the race floor). Stamina refills through Rest, Sleep, Prayer, and items; the total only grows back through events, class levels, and permanent items. Choices after a fight (Rest, Sleep, Prayer, items) matter most.
@@ -83,7 +83,7 @@ Percentages are the chance of rolling at least one lucky number.
 
 | Lucky dice rolled | Outcome |
 | --- | --- |
-| None | The enemy counters and you gain a TNT; in a trial, it counts as if no dice were rolled: a clean pass if the requirement is met, otherwise falling short by the real gap |
+| None | The enemy counters and you gain a TNT; in a trial, it counts as if no dice were rolled: a clean pass if the requirement is met, otherwise falling short by the real gap (1–3 short: through, with a TNT; a Lucky-only option, 4+ short: not through, and Injured) |
 | 1 | Critical ×2 |
 | 2 | Critical ×3 |
 | 3 or more | ×4, and so on |

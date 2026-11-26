@@ -50,9 +50,10 @@ function save() { if (g) write(GAME_KEY, g); }
 function say(lines) { g.lines = lines; g.log.push(...lines); if (g.log.length > 300) g.log = g.log.slice(-300); }
 function addLines(lines) { g.lines = [...g.lines, ...lines]; g.log.push(...lines); }
 
-function arrive(a) {
+// fresh: time has passed here (a Rest or Sleep), so a trial rolls a new Fortune opening.
+function arrive(a, fresh) {
   g.text = a.text;
-  if (a.screen === 'trial') { g.screen = 'trial'; if (!g.world.trial) g.world = beginTrial(g.character, g.world, a.trialId); }
+  if (a.screen === 'trial') { g.screen = 'trial'; if (fresh || !g.world.trial) g.world = beginTrial(g.character, g.world, a.trialId); }
   else if (a.screen === 'combat') startFight(a.enemyId);
   else g.screen = 'travel';
 }
@@ -93,17 +94,21 @@ const act = {
     const r = go(g.world, g.character, dir);
     g.world = r.world;
     if (r.camp) { g.screen = 'camp'; say(['You make camp.']); return; }
-    say([`You travel ${{ N: 'north', E: 'east', S: 'south', W: 'west' }[dir]} to the ${getEvent(g.world.eventId).name}. It is ${g.world.timeOfDay}.`]);
+    const way = r.journeys > 1 ? ' the long way round' : '';
+    say([`You travel ${{ N: 'north', E: 'east', S: 'south', W: 'west' }[dir]}${way} to the ${getEvent(g.world.eventId).name}. It is ${g.world.timeOfDay}.`]);
     arrive(r.arrival);
   },
   faceTrial() { arrive(arrival(g.world)); },
   trial(dir) {
     const lucky = ui.armed && g.world.trial && g.world.trial.fortune.open;
-    const r = attemptTrial(g.character, g.world, { dir, lucky });
+    let r;
+    try { r = attemptTrial(g.character, g.world, { dir, lucky }); }
+    catch (e) { say([e.message]); return; }
     g.character = r.character; g.world = r.world; ui.armed = false;
     ui.dice = diceFrom(r.lines, g.character.luckyNumber);
     say(r.lines);
     if (r.outcome === 'defeat') return finish('defeat');
+    if (r.outcome === 'blocked') return;                 // still at the trial: try another way, or leave
     const ev = getEvent(g.world.eventId);
     if (r.next === 'combat') { g.text = ev.doneText; startFight(ev.enemy); }
     else { g.screen = 'travel'; g.text = ev.doneText || g.text; }
@@ -123,9 +128,9 @@ const act = {
     }
     act.leaveCamp(true);
   },
-  leaveCamp(keepLines) {
-    if (!keepLines) say(['You break camp.']);
-    arrive(arrival(g.world));
+  leaveCamp(rested) {
+    if (!rested) say(['You break camp.']);
+    arrive(arrival(g.world), rested);
   },
   pend(choice) { ui.pending = choice; },
   fight(choice) {
@@ -235,7 +240,7 @@ function back() {
     if (i > 0) { g.creation.step = order[i - 1]; draw(); }
     return;
   }
-  if (g.screen === 'trial') { g.screen = 'travel'; say(['You step back from it for now.']); save(); draw(); }
+  if (g.screen === 'trial') { g.screen = 'travel'; ui.armed = false; say(['You step back from it for now. You can rest, go round, or come back.']); save(); draw(); }
 }
 
 function turnPage(d) {
@@ -247,6 +252,10 @@ function turnPage(d) {
 
 attachKeyboard({ getHold: (d) => (ui.overlay ? null : holds[d]), onPage: turnPage, onBack: back, onLucky: () => { toggleLucky(); draw(); } });
 attachSwipes(app, { onPage: turnPage, onBack: back });
+
+// Save once more when the app is closed or hidden (every action already autosaves).
+window.addEventListener('pagehide', save);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
 
 // Start on the title screen (Continue offers the saved run).
 draw();

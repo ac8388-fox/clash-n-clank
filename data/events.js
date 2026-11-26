@@ -6,11 +6,15 @@
 // is Camp ({ camp: true, teaser }) – a direction that can't be traveled is
 // never a dead option. An exit can depend on a world flag:
 //   { requires: 'gorgeCrossed', to, teaser, otherwise: { camp: true, teaser } }
+// An exit can be a long way round ({ to, teaser, journeys: 2 }): it takes two
+// parts of the day instead of one. The Hills ↔ Sealed Crypt detour goes round
+// the Gorge, so the Crypt can be reached without crossing the bridge.
 //
 // Trial options: one per direction. Up FAI, Right STR, Down WIS, Left AGI.
-// Every option gets the player through (see engine/trial.js): success holds
-// the text, the world flags it sets, and what happens next; shortfall is the
-// extra line when they get through by falling short.
+// See engine/trial.js: 1–3 short still gets through (with a TNT); 4 or more
+// short is Lucky only. success holds the text, the world flags it sets, and
+// what happens next; shortfall is the extra line when they get through by
+// falling short.
 
 export const EVENTS = {
   crossroads: {
@@ -42,8 +46,9 @@ export const EVENTS = {
     doneText: 'The crypt stands open. Cold air breathes out of the dark.',
     clearedText: 'The barrow is still. Nothing stirs in the dark now.',
     exits: {
-      N: { to: 'gorge', teaser: 'Back across the bridge' },
-      E: { camp: true, teaser: 'Cold stone and old bones' },
+      N: { requires: 'gorgeCrossed', to: 'gorge', teaser: 'Back across the bridge',
+           otherwise: { camp: true, teaser: 'The bridge, uncrossed, far above' } },
+      E: { to: 'hills', teaser: 'The long way round, by the river', journeys: 2 },
       S: { camp: true, teaser: 'The hillside closes in' },
       W: { camp: true, teaser: 'A dead end of fallen rock' },
     },
@@ -55,7 +60,7 @@ export const EVENTS = {
     exits: {
       N: { camp: true, teaser: 'High moor, no path' },
       E: { camp: true, teaser: 'Heather and stone' },
-      S: { camp: true, teaser: 'A steep bank' },
+      S: { to: 'crypt', teaser: 'The long way round the gorge', journeys: 2 },
       W: { to: 'crossroads', teaser: 'Down to the crossroads' },
     },
   },

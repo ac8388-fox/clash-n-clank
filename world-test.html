@@ -174,7 +174,9 @@
   }
   function tryTrial(dir) {
     const lucky = ui.armed && g.world.trial && g.world.trial.fortune.open;
-    const r = attemptTrial(g.character, g.world, { dir, lucky });
+    let r;
+    try { r = attemptTrial(g.character, g.world, { dir, lucky }); }
+    catch (e) { say([e.message]); return; }                // Lucky only, without a lucky attempt
     g.character = r.character; g.world = r.world; ui.armed = false;
     say(r.lines);
     if (r.outcome === 'defeat') return finish('defeat');

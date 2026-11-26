@@ -11,7 +11,7 @@
 import { getEvent, DIRECTIONS } from '../data/events.js';
 import { getEnemy } from '../data/enemies.js';
 import { createGame } from './state.js';
-import { travel, rest, sleep, canSleep, isDefeated, staminaOf } from './rules.js';
+import { travel, advanceTime, rest, sleep, canSleep, isDefeated, staminaOf } from './rules.js';
 import { startCombat, finishCombat } from './combat.js';
 import { beginTrial } from './trial.js';
 import { createRng } from './random.js';
@@ -25,7 +25,7 @@ export function newRun(creation, seed) {
 }
 
 // The four exits from where the player stands, resolved for the world's flags.
-// Each is { dir, to, name, teaser, camp, visited }.
+// Each is { dir, to, name, teaser, camp, visited, journeys }.
 export function exitsFor(world, eventId = world.eventId) {
   const ev = getEvent(eventId);
   const out = {};
@@ -35,7 +35,7 @@ export function exitsFor(world, eventId = world.eventId) {
     if (x.camp) out[d] = { dir: d, camp: true, name: 'Camp', teaser: x.teaser };
     else {
       const visited = !!world.visited[x.to];
-      out[d] = { dir: d, to: x.to, name: getEvent(x.to).name, teaser: x.teaser, visited };
+      out[d] = { dir: d, to: x.to, name: getEvent(x.to).name, teaser: x.teaser, visited, journeys: x.journeys || 1 };
     }
   }
   return out;
@@ -63,14 +63,16 @@ export function arrival(world) {
 }
 
 // Travel one direction. A Camp exit doesn't move you: it opens Camp.
-// Returns { world, camp } or { world, arrival }.
+// A long way round takes two journeys (two parts of the day).
+// Returns { world, camp } or { world, arrival, journeys }.
 export function go(worldIn, character, dir) {
   const x = exitsFor(worldIn)[dir];
   if (x.camp) return { world: clone(worldIn), camp: true };
   let w = travel(worldIn, x.to, dir);
+  for (let i = 1; i < x.journeys; i++) w = advanceTime(w);
   const arr = arrival(w);
   if (arr.screen === 'trial') w = beginTrial(character, w, arr.trialId);
-  return { world: w, arrival: arr };
+  return { world: w, arrival: arr, journeys: x.journeys };
 }
 
 // Camp: Rest (+50% of each total, one part of the day) or Sleep (Evening or

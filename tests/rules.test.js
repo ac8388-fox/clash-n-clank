@@ -300,11 +300,8 @@ test('Injured lowers that attribute’s total by 2 (and nothing else)', () => {
   eq(R.attrTotal(c, 'STR'), 8 - 2); eq(R.attrTotal(c, 'AGI'), 6);
   eq(R.luckOf(c), R.luckOf(human()), 'Luck uses Natural + Class, so it is unchanged');
 });
-test('Forced lucky attempt: only when the only option can’t be met', () => {
-  const c = human(); // STR 8
-  ok(R.isForcedLuckyAttempt([{ attr: 'STR', requirement: 10 }], c));
-  ok(!R.isForcedLuckyAttempt([{ attr: 'STR', requirement: 8 }], c));
-  ok(!R.isForcedLuckyAttempt([{ attr: 'STR', requirement: 10 }, { attr: 'WIS', requirement: 12 }], c));
+test('Lucky only: an option 4 or more short of current stamina', () => {
+  ok(!R.isLuckyOnly(0)); ok(!R.isLuckyOnly(3)); ok(R.isLuckyOnly(4)); ok(R.isLuckyOnly(9));
 });
 
 // --- Combat fatigue and action attributes ------------------------------------------

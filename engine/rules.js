@@ -383,11 +383,10 @@ export function trialSetback(attr, shortfall) {
   return { id: TRIAL_SETBACK[attr], kind: 'TNT' };
 }
 
-// When a trial's only option can't be met, it becomes a lucky attempt.
-// options: [{ attr, requirement }]
-export function isForcedLuckyAttempt(options, character) {
-  return options.length === 1 &&
-    !trialCheck(character.attrs[options[0].attr].stamina, options[0].requirement);
+// A trial option 4 or more short of the requirement (on current stamina) can
+// only be passed with a lucky attempt; a failed one doesn't get through.
+export function isLuckyOnly(shortfall) {
+  return shortfall >= CHRONIC_SHORTFALL;
 }
 
 // ---------------------------------------------------------------------------

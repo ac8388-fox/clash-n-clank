@@ -12,7 +12,7 @@ This spec is for building, not designing: where *Core Rules* or *Class Abilities
 
 1. Title screen, then character creation.
 2. Start at the Crossroads in the Morning.
-3. Travel to the Gorge (trial), the Sealed Crypt (trial, then a Barrow Knight fight), the Hills (werewolf fight), and the Village (safe Sleep).
+3. Travel to the Gorge (trial), the Sealed Crypt (trial, then a Barrow Knight fight; also reachable the long way round from the Hills), the Hills (werewolf fight), and the Village (safe Sleep).
 4. Camp or Sleep to recover.
 5. The slice ends when both enemies are defeated, or the character is defeated.
 
@@ -52,10 +52,10 @@ Travel is the hub: every event ends by returning to the travel diamond, and the 
 | Title | New Game, Continue, Settings | — |
 | Character creation | Pick one of four races, a lucky number, one of four Main occupations, a name | — |
 | Travel | Four directions with teasers; a blocked direction becomes Camp | Crossroads |
-| Trial | Four attribute options; Fortune opening if one appears | Gorge, Sealed Crypt |
+| Trial | Four attribute options (“Lucky only” when 4 or more short); Fortune opening if one appears; swipe down to leave | Gorge, Sealed Crypt |
 | Combat | Diamond carousel, targeting, clues, Clash event, dice overlay | Werewolf, Barrow Knight |
 | Camp | Rest or Sleep, results shown | — |
-| Menu | Settings (incl. Display), Save Game, Journal, Map, Help, Quit to Title | Gorge (open) |
+| Menu | Settings (incl. Display), Save Game, Journal, Map (the five places, with the long way round), Help, Quit to Title | Gorge (open) |
 | Character | Attributes (stamina / total), Luck, traits, class, occupation; in combat, a plain line such as “Reading the werewolf: good” (good / fair / poor while a tell source is active, or “no tells”) | — |
 | Inventory | Ready weapons, pack, armor slots, consumables | — |
 | End | Victory or defeat summary, then Title | — |
@@ -179,14 +179,15 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Cooldowns | Swift 1 exchange, Fair 2, Drawn 3; Mastery and racial ability once per Rest |
 | Pray | One random combat TPT (Focused, Emboldened, Steeled, Blessed, Nimble), or two if the enemy took no offensive action |
 | Predictable | Repeating the same action at the same target two exchanges running: the enemy's next step is a counter, an attack with its fastest weapon and Advantage, aimed at random (never at a target you have been Blocking) |
-| Trial check | Every option gets the player through. A clean pass, at no cost, if the attribute's current stamina ≥ the requirement |
-| Falling short | If the attribute's stamina is below the requirement, the player still gets through, but that stamina drops to 0 and they gain a negative trait. Short by 1–3: a TNT matched to the attribute (STR Winded: no Drawn actions; AGI Bruised: Disadvantage on attacks; WIS Dazed: no tells; FAI Shaken: Disadvantage in Clashes); cleared by Rest (Bruised by Sleep). Short by 4 or more: a CNT, Injured in that attribute (−2 to its total until treated: Sleeping at the Village treats it; Sleeping at a wild Camp does not). The status line shows “Injured (AGI) – sleep at the Village to treat”. Steeled ignores the TNT. The options show the cost before the player chooses |
-| Forced lucky attempt | When a trial's only option can't be met, the option becomes a lucky attempt (any lucky number is a clean pass; none counts as falling short by the real gap, the same as without the dice). The same applies to a chosen lucky attempt in a trial. In combat, a lucky attempt with no lucky number still gives the enemy a free attack and leaves you Off-Balance |
+| Trial check | A clean pass, at no cost, if the attribute's current stamina ≥ the requirement. The gap always uses current stamina, so resting first can shrink it |
+| Falling short | Short by 1–3: the player still gets through, but that stamina drops to 0 and they gain a TNT matched to the attribute (STR Winded: no Drawn actions; AGI Bruised: Disadvantage on attacks; WIS Dazed: no tells; FAI Shaken: Disadvantage in Clashes); cleared by Rest (Bruised by Sleep). Steeled ignores the TNT. The options show the cost before the player chooses |
+| Lucky only | Short by 4 or more: the option says “Lucky only” (no dashed border) and can be chosen only as a lucky attempt, while a Fortune opening shows. Any lucky number: a clean pass. None: the player does **not** get through; that stamina drops to 0 and they are Injured in that attribute (a CNT, −2 to its total until treated: Sleeping at the Village treats it; Sleeping at a wild Camp does not; the status line shows “Injured (AGI) – sleep at the Village to treat”). The opening is then spent; the player can try another option, or leave (swipe down), rest, and come back. These are the only options that can block the player; the racial ability always passes. The trial text says when an option is Lucky only and that resting first can shrink the gap |
+| Lucky attempt in a trial | Any lucky number is a clean pass; none counts as the real gap, the same as without the dice (met: clean; 1–3 short: through, with the TNT; Lucky only: not through, Injured). In combat, a lucky attempt with no lucky number still gives the enemy a free attack and leaves you Off-Balance |
 | Combat fatigue | After a fight, each attribute's stamina drops by half the number of actions that used it, rounded up |
 | Action attributes | Pray FAI, Attack = the weapon's attribute, Block WIS, Item AGI, abilities their listed attribute |
 | Rest | +50% of each total to stamina, clears Rest-cleared TNTs, resets Rest abilities, takes one part of the day |
 | Sleep | Evening or Night only: full stamina, clears all TPTs and TNTs, resets everything, wakes in the Morning |
-| Travel | Each journey takes one part of the day |
+| Travel | Each journey takes one part of the day; the long way round the Gorge takes two |
 | Durability | 20 for every item; −1 per Clank, Block, or hit taken; broken at 0 |
 | Situational misses | An attack always misses when the attacker is Off-Balance, the target is out of reach (a Close weapon against a foe at Approach; in the slice the fighting distance is the enemy's range: werewolf Close, barrow knight Approach), or the target shifted position this exchange with a move at least as fast as the attack (the werewolf's sidestepping feint at step 3) |
 | Miss chance | Attacker's (current AGI stamina + Luck) against the defender's: defender ahead → 3% + 1.2% per point; level → 3%; attacker ahead → 2%; Enraged +8%; never above 20%. Enemies use their own Luck (werewolf 6, barrow knight 6). A successful lucky attempt never misses; Fortune's Favor turns one miss per Rest into a hit |
@@ -234,11 +235,13 @@ Five events, two trials, two enemies, and one class are enough to exercise every
 | --- | --- | --- | --- | --- | --- |
 | Crossroads (start, Morning) | Travel hub | Village: “Smoke above the trees” | Hills: “A howl from the hills” | Gorge: “A rope bridge sways” | Camp: “West is a sheer drop” |
 | Gorge | Trial | Crossroads | Camp | Sealed Crypt (after crossing): “Steps into the dark” | Camp |
-| Sealed Crypt | Trial, then combat | Gorge | Camp | Camp | Camp |
-| Hills | Combat | Camp | Camp | Camp | Crossroads |
+| Sealed Crypt | Trial, then combat | Gorge (after crossing; before, Camp: “The bridge, uncrossed, far above”) | Hills, the long way round: “The long way round, by the river” (2 journeys) | Camp | Camp |
+| Hills | Combat | Camp | Camp | Sealed Crypt, the long way round: “The long way round the gorge” (2 journeys) | Crossroads |
 | Village | Camp (safe Sleep) | Camp | Camp | Crossroads | Camp |
 
-Every trial option gets the player through: meeting the requirement is a clean pass, and falling short costs that attribute's stamina and leaves a TNT or CNT (see “Falling short”).
+**Going round a trial.** The player's position is on the map, so a trial they can't or won't pass never traps them. Every trial screen can be left (swipe down = back) to travel elsewhere. The Gorge has a longer detour: from the Hills, the long way round reaches the Sealed Crypt without crossing the bridge. It takes two journeys (two parts of the day) instead of one, and it passes through the Hills, so it may mean facing the werewolf first. The Map shows it as a dashed road. The Sealed Crypt has no way round (it is a sealed door), but the player can leave, rest, and come back: a Rest brings the racial ability back, and the racial ability always passes, so the slice can always be finished.
+
+Trial options: meeting the requirement is a clean pass; 1–3 short still gets through, at the cost of that attribute's stamina and a TNT; 4 or more short is Lucky only (see “Falling short” and “Lucky only”).
 
 **Trials**
 
@@ -358,7 +361,7 @@ Build in five steps, and make every step end in something that can be opened and
 | 2. Combat | A practice fight against the werewolf, with a restart button | Its clues follow the pattern table: when its eyes drop to your legs, it usually attacks your legs (Blocking Legs stops the hit) but sometimes feints. A fight lasts a few minutes, not seconds and not forever |
 | 3. Trials and travel | The Crossroads with working directions, plus the Gorge and Crypt trials | Every direction leads somewhere and West becomes Camp; the time of day changes with each journey; a failed trial drains the attribute that was tried |
 | 4. Screens | Every screen styled like the mockups | Side by side with the mockups on a phone: buttons, corners, top bar, and colors match, and the Display setting switches Text and Graphic |
-| 5. Full slice | The whole loop from the title screen | Tick every item in the done checklist below |
+| 5. Full slice | The whole loop from the title screen: character creation, travel, trials (with Lucky only and the way round), fights, Camp, the end screen, and autosave | Tick every item in the done checklist below |
 
 **At the end of every step, ask the tool:**
 
@@ -374,7 +377,8 @@ Slice 1 is done when a new player can finish the loop on a phone without help, a
 - [ ] Create a character from four random races and four random occupations, with a lucky number
 - [ ] Starting Luck and dice count match the race table
 - [ ] Travel from the Crossroads in all four directions, including Camp for the blocked West, with time advancing each journey
-- [ ] Get through both trials both ways: a clean pass when the requirement is met, and falling short (that stamina to 0, plus a TNT for 1–3 short or Injured for 4+); Sleeping at the Village treats Injured, a wild Camp doesn't; a failed lucky attempt counts as the real gap; the racial ability replaces the weakest option
+- [ ] Get through both trials both ways: a clean pass when the requirement is met, and falling 1–3 short (that stamina to 0, plus a TNT); an option 4 or more short says “Lucky only” and can be tried only with a lucky attempt (success: a clean pass; failure: not through, that stamina to 0, and Injured); Sleeping at the Village treats Injured, a wild Camp doesn't; a failed lucky attempt counts as the real gap; the racial ability replaces the weakest option and always passes
+- [ ] Every trial screen can be left (swipe down); the long way round (Hills ↔ Sealed Crypt, two journeys) reaches the Crypt without crossing the Gorge and shows on the Map; the slice can always be finished, even when every Gorge option is Lucky only
 - [ ] Fight the werewolf and the Barrow Knight using the exchange loop, with clues and gaze captions
 - [ ] No tells by default: captions are neutral and don't give the move away; tells come only from a source (Focused from Pray gives reverse tells for 3 exchanges; Dazed blocks them); tells are always true and say what the enemy won't do; the WIS + FAI comparison sets how often a source works; Night lowers a tell one step; Clashes follow the same rule
 - [ ] The character screen shows “Reading the <enemy>: …” in combat (good / fair / poor with a source, otherwise no tells)

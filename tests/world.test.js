@@ -1,5 +1,5 @@
 // Automatic tests for travel and trials (Build Spec → "World map", "Trials",
-// "Rules engine": Travel, Trial check, Trial failure, Forced lucky attempt,
+// "Rules engine": Travel, Trial check, Falling short, Lucky only, the detour,
 // Rest, Sleep; and the Step 3 phone checks).
 
 import { test, eq, ok, throws } from './harness.js';
@@ -47,8 +47,9 @@ test('The map matches the Build Spec table', () => {
   const name = (id, d, flags = {}) => W.exitsFor({ ...run().world, eventFlags: { ...run().world.eventFlags, ...flags } }, id)[d].name;
   eq(['N', 'E', 'S', 'W'].map(d => name('gorge', d)), ['Crossroads', 'Camp', 'Camp', 'Camp']);
   eq(name('gorge', 'S', { gorgeCrossed: true }), 'Sealed Crypt');
-  eq(['N', 'E', 'S', 'W'].map(d => name('crypt', d)), ['Gorge', 'Camp', 'Camp', 'Camp']);
-  eq(['N', 'E', 'S', 'W'].map(d => name('hills', d)), ['Camp', 'Camp', 'Camp', 'Crossroads']);
+  eq(['N', 'E', 'S', 'W'].map(d => name('crypt', d)), ['Camp', 'Hills', 'Camp', 'Camp']);
+  eq(name('crypt', 'N', { gorgeCrossed: true }), 'Gorge');
+  eq(['N', 'E', 'S', 'W'].map(d => name('hills', d)), ['Camp', 'Camp', 'Sealed Crypt', 'Crossroads']);
   eq(['N', 'E', 'S', 'W'].map(d => name('village', d)), ['Camp', 'Camp', 'Crossroads', 'Camp']);
 });
 test('Phone check: each journey moves the time of day on: Morning, Afternoon, Evening, Night, Morning', () => {
@@ -103,14 +104,51 @@ test('Falling short: you still get through, that stamina drops to 0, and you gai
   ok(r.character.traits.some(t => t.id === 'dazed' && t.kind === 'TNT'), 'Dazed');
   eq(W.arrival(r.world).screen, 'travel', 'the trial is done');
 });
-test('Phone check: Dash Across on too little AGI (short by 4) exhausts AGI and leaves you Injured (a CNT)', () => {
-  const s = goTo({ ...run(), character: noRacial(run().character) }, 'S');
-  const r = T.attemptTrial(s.character, closeFortune(s.world), { dir: 'left' });   // AGI 6 vs 10
-  eq(r.outcome, 'shortfall');
+test('Lucky only: 4 or more short can’t be chosen without a lucky attempt', () => {
+  const s0 = goTo({ ...run(), character: noRacial(run().character) }, 'S');
+  const opts = T.trialOptions(s0.character, 'gorge');
+  eq(opts.map(o => o.luckyOnly), [false, false, false, true], 'Dash across: AGI 6 vs 10');
+  throws(() => T.attemptTrial(s0.character, closeFortune(s0.world), { dir: 'left' }));
+  throws(() => T.attemptTrial(s0.character, closeFortune(s0.world), { dir: 'left', lucky: true }), 'no opening, no lucky attempt');
+});
+test('Lucky only, uses current stamina: resting first can shrink the gap', () => {
+  const c = noRacial(run().character); c.attrs.AGI.stamina = 2;            // 8 short: Lucky only
+  ok(T.trialOptions(c, 'gorge').find(o => o.dir === 'left').luckyOnly);
+  c.attrs.FAI.stamina = 3;                                                  // Pray for passage: 5 short
+  const rested = W.campRest(c, run().world).character;                     // +3 each (half of 6)
+  eq(rested.attrs.AGI.stamina, 5); eq(rested.attrs.FAI.stamina, 6);
+  eq(T.trialOptions(rested, 'gorge').find(o => o.dir === 'up').luckyOnly, false, 'now only 2 short');
+});
+function findLuckyOnly(want, dir = 'left') {
+  for (let seed = 1; seed < 20000; seed++) {
+    const s = goTo({ character: noRacial(run('human', seed).character), world: run('human', seed).world }, 'S');
+    if (!s.world.trial.fortune.open) continue;
+    const r = T.attemptTrial(s.character, s.world, { dir, lucky: true });
+    if (r.lines[0].startsWith('Lucky!') === want) return { s, r };
+  }
+  throw new Error('no seed');
+}
+test('Lucky only, lucky success: a clean pass', () => {
+  const { s, r } = findLuckyOnly(true);
+  eq(r.outcome, 'success'); ok(r.world.eventFlags.gorgeCrossed);
+  eq(r.character.attrs.AGI.stamina, s.character.attrs.AGI.stamina); eq(r.character.traits, s.character.traits);
+});
+test('Lucky only, lucky failure: not through, that stamina to 0, and Injured', () => {
+  const { r } = findLuckyOnly(false);
+  eq(r.outcome, 'blocked'); eq(r.next, 'trial');
+  ok(!r.world.eventFlags.gorgeCrossed, 'not across');
   eq(r.character.attrs.AGI.stamina, 0);
-  const inj = r.character.traits.find(t => t.id === 'injured');
-  eq(inj, { id: 'injured', kind: 'CNT', attr: 'AGI', source: 'trial' });
+  eq(r.character.traits.find(t => t.id === 'injured'), { id: 'injured', kind: 'CNT', attr: 'AGI', source: 'trial' });
   eq(attrTotal(r.character, 'AGI'), 6 - 2, 'AGI total lowered by 2');
+  ok(r.world.trial, 'the trial is still there'); eq(r.world.trial.fortune.open, false, 'the opening is spent');
+  eq(W.exitsFor(r.world).N.name, 'Crossroads', 'and you can leave');
+});
+test('The racial ability still always passes, even where every other option is Lucky only', () => {
+  const c = run().character; for (const k of ATTRS) c.attrs[k].stamina = 1;
+  const s = goTo({ character: c, world: run().world }, 'S');
+  const opts = T.trialOptions(c, 'gorge');
+  eq(opts.filter(o => o.luckyOnly).length, 3); ok(opts.find(o => o.racial));
+  eq(T.attemptTrial(c, closeFortune(s.world), { dir: opts.find(o => o.racial).dir }).outcome, 'success');
 });
 test('Each attribute has its own temporary setback: Winded (STR), Bruised (AGI), Dazed (WIS), Shaken (FAI)', () => {
   const tries = { up: 'shaken', right: 'winded', down: 'dazed', left: 'bruised' };
@@ -186,9 +224,10 @@ test('Racial ability: replaces the weakest option, succeeds automatically, then 
   ok(W.campRest(done.character, done.world).character.racialReady, 'back after a Rest');
 });
 test('Empty stamina: attempting with an empty pool wears its Natural total down', () => {
-  const c = noRacial(run().character); c.attrs.AGI.stamina = 0;
+  const c = noRacial(run().character); c.attrs.WIS.stamina = 0;
   const s = goTo({ character: c, world: run().world }, 'S');
-  eq(T.attemptTrial(c, closeFortune(s.world), { dir: 'left' }).character.attrs.AGI.natural, 5);
+  const w = { ...s.world, trial: { ...s.world.trial, fortune: { open: true, hint: 'x' } } };
+  eq(T.attemptTrial(c, w, { dir: 'down', lucky: true }).character.attrs.WIS.natural, 5);
 });
 function findTrialLucky(want) {
   for (let seed = 1; seed < 20000; seed++) {
@@ -220,18 +259,12 @@ test('Trial lucky attempt with no lucky number, when the requirement is met: sti
   }
   throw new Error('no seed');
 });
-test('Forced lucky attempt: when the only option left can’t be met, it rolls the dice', () => {
-  ok(T.attemptTrial, 'exists');
-  const c = noRacial(run().character);
-  const opts = T.trialOptions(c, 'crypt').map((o, i) => ({ ...o, disabled: i !== 1 }));
-  ok(opts.filter(o => !o.disabled).length === 1 && !opts[1].canMeet, 'only Force the door, and STR 8 < 12');
-});
 test('Trial defeat: getting through on your last stamina ends the run', () => {
   const c = noRacial(run().character);
   for (const k of ATTRS) c.attrs[k].stamina = 0;
-  c.attrs.AGI.stamina = 1;
+  c.attrs.WIS.stamina = 4;                                                  // Study the knots: 3 short
   const s = goTo({ character: c, world: run().world }, 'S');
-  const r = T.attemptTrial(c, closeFortune(s.world), { dir: 'left' });
+  const r = T.attemptTrial(c, closeFortune(s.world), { dir: 'down' });
   eq(r.outcome, 'defeat');
 });
 
@@ -297,8 +330,65 @@ test('A whole fight in the world runs to the end with the full combat rules', ()
 test('Same seed, same choices: the world replays the same way', () => {
   const play = () => {
     let s = goTo({ ...run('human', 9), character: noRacial(run('human', 9).character) }, 'S');
-    const r = T.attemptTrial(s.character, s.world, { dir: 'left', lucky: true });
+    const r = T.attemptTrial(s.character, s.world, { dir: 'down', lucky: true });
     return JSON.stringify([r.lines, r.world.rngState]);
   };
   eq(play(), play());
+});
+
+// --- Going round a trial ------------------------------------------------------------------------
+
+test('The long way round: Hills ↔ Sealed Crypt, without crossing the Gorge, takes two parts of the day', () => {
+  const s = goTo(run(), 'E');                                   // Crossroads → Hills: Afternoon
+  eq(s.world.timeOfDay, 'Afternoon');
+  const r = W.go(s.world, s.character, 'S');
+  eq(r.world.eventId, 'crypt'); eq(r.journeys, 2);
+  eq(r.world.timeOfDay, 'Night', 'two journeys: Evening, then Night');
+  ok(!r.world.eventFlags.gorgeCrossed);
+  eq(r.arrival.screen, 'trial'); eq(r.arrival.trialId, 'crypt');
+  const back = W.go(r.world, r.character, 'E');
+  eq(back.world.eventId, 'hills'); eq(back.world.timeOfDay, 'Afternoon'); eq(back.world.day, 2);
+});
+test('Every trial can be left: the Gorge leads back north, and the Crypt back round by the Hills', () => {
+  const g = goTo(run(), 'S').world;
+  eq(W.exitsFor(g).N.name, 'Crossroads');
+  const c = goTo(run(), 'E', 'S').world;
+  eq(W.exitsFor(c).E.name, 'Hills');
+});
+test('The slice can always be finished: with every Gorge option Lucky only, go round, fight the werewolf, rest, open the Crypt, fight the knight', () => {
+  let { character: c, world: w } = run('human', 5);
+  c.racialReady = false;
+  for (const k of ATTRS) c.attrs[k].stamina = 2;                   // every Gorge option 5–8 short
+  let r = W.go(w, c, 'S'); w = r.world;
+  ok(T.trialOptions(c, 'gorge').every(o => o.luckyOnly), 'every Gorge option is Lucky only');
+  r = W.go(w, c, 'N'); w = r.world;                                // leave: back to the Crossroads
+  r = W.go(w, c, 'E'); w = r.world;                                // the Hills: the werewolf
+  eq(r.arrival.screen, 'combat');
+  let { combat } = W.beginFight(c, w, 'werewolf');
+  const f = W.endFight(c, w, { ...combat, outcome: 'victory' });
+  c = f.character; w = f.world; eq(f.runOver, null);
+  r = W.go(w, c, 'S'); w = r.world;                                // the long way round
+  eq(w.eventId, 'crypt'); eq(r.arrival.screen, 'trial');
+  const camp = Object.values(W.exitsFor(w)).find(x => x.camp);    // rest at the Crypt
+  ok(camp, 'Camp beside the Crypt');
+  ({ character: c, world: w } = W.campRest(c, w));
+  ok(c.racialReady, 'the racial ability is back after a Rest');
+  w = T.beginTrial(c, w, 'crypt');
+  const racial = T.trialOptions(c, 'crypt').find(o => o.racial);
+  const opened = T.attemptTrial(c, { ...w, trial: { ...w.trial, fortune: { open: false } } }, { dir: racial.dir });
+  eq(opened.outcome, 'success'); eq(opened.next, 'combat');
+  const a = W.arrival(opened.world);
+  eq(a.screen, 'combat'); eq(a.enemyId, 'barrowKnight');
+  ok(W.beginFight(opened.character, opened.world, 'barrowKnight').combat, 'the knight fight starts');
+});
+test('From every place, the Crypt can be reached without crossing the Gorge', () => {
+  const w0 = run().world;
+  for (const start of Object.keys(EVENTS)) {
+    const seen = new Set([start]); const queue = [start];
+    while (queue.length) {
+      const id = queue.shift();
+      for (const x of Object.values(W.exitsFor(w0, id))) if (!x.camp && !seen.has(x.to)) { seen.add(x.to); queue.push(x.to); }
+    }
+    ok(seen.has('crypt'), `${start} → Sealed Crypt`);
+  }
 });

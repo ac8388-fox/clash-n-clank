@@ -31,15 +31,50 @@ export function journalPanel(log) {
   return { kind: 'panel', html: `<h2>Journal</h2>` + (lines.length ? lines.map(l => `<p>${esc(l)}</p>`).join('') : '<p class="note">Nothing written yet.</p>') };
 }
 
+// The slice map: the five places, the roads between them, and the long way
+// round the Gorge (Hills ↔ Sealed Crypt, two journeys). Places not yet
+// visited show "?"; you are where the blue box is.
+const MAP_SPOTS = {
+  village:    { x: 150, y: 24 },
+  crossroads: { x: 150, y: 94 },
+  hills:      { x: 262, y: 94 },
+  gorge:      { x: 150, y: 164 },
+  crypt:      { x: 150, y: 234 },
+};
+function mapSvg(world) {
+  const W = 96, H = 30;
+  const box = (id) => {
+    const p = MAP_SPOTS[id], ev = EVENTS[id], here = world.eventId === id;
+    const known = world.visited[id] || here;
+    const foe = ev.enemy && world.defeated[ev.enemy] ? ' ✓' : '';
+    return `<rect x="${p.x - W / 2}" y="${p.y - H / 2}" width="${W}" height="${H}" class="${here ? 'here' : ''}"/>` +
+      `<text x="${p.x}" y="${p.y + 6}">${esc(known ? ev.name : '?')}${foe}</text>`;
+  };
+  const road = (a, b, cls = '') => {
+    const p = MAP_SPOTS[a], q = MAP_SPOTS[b];
+    return `<line class="${cls}" x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}"/>`;
+  };
+  const h = MAP_SPOTS.hills, c = MAP_SPOTS.crypt;
+  const bridge = world.eventFlags.gorgeCrossed ? '' : 'uncrossed';
+  return `<svg class="map" viewBox="0 0 320 260" role="img" aria-label="Map of the slice">
+    ${road('village', 'crossroads')}${road('crossroads', 'hills')}${road('crossroads', 'gorge')}${road('gorge', 'crypt', bridge)}
+    <path class="detour" d="M ${h.x + 30} ${h.y + 15} V ${c.y} H ${c.x + W / 2}"/>
+    <text class="small" x="${h.x - 22}" y="${(h.y + c.y) / 2 - 4}">long way</text>
+    <text class="small" x="${h.x - 22}" y="${(h.y + c.y) / 2 + 14}">round</text>
+    <text class="small" x="${h.x - 22}" y="${(h.y + c.y) / 2 + 32}">(2 journeys)</text>
+    <text class="small" x="${c.x - 70}" y="${(MAP_SPOTS.gorge.y + c.y) / 2 + 5}">${bridge ? 'bridge' : ''}</text>
+    ${Object.keys(MAP_SPOTS).map(box).join('')}
+  </svg>`;
+}
+
 export function mapPanel(world) {
   const here = getEvent(world.eventId);
-  const known = Object.keys(EVENTS).filter(id => world.visited[id]).map(id => EVENTS[id].name);
   const exits = exitsFor(world);
   return { kind: 'panel', html: `<h2>Map</h2>
     <p>You are at the <b>${esc(here.name)}</b>, facing ${esc(DIR_WORD[world.facing])}. Day ${world.day}, ${esc(world.timeOfDay)}.</p>
-    <h3>From here</h3>${['N', 'E', 'S', 'W'].map(d => `<p>${DIR_WORD[d]}: ${esc(exits[d].camp ? 'Camp' : exits[d].visited ? exits[d].name : '?')} – ${esc(exits[d].teaser)}</p>`).join('')}
-    <h3>Places you know</h3><p>${known.map(esc).join(' · ')}</p>
-    <p class="note">The full map comes in a later slice.</p>` };
+    ${mapSvg(world)}
+    <p class="note">The dashed road goes round the Gorge: Hills to Sealed Crypt, two journeys instead of one, through the werewolf’s hills.</p>
+    <h3>From here</h3>${['N', 'E', 'S', 'W'].map(d => `<p>${DIR_WORD[d]}: ${esc(exits[d].camp ? 'Camp' : exits[d].visited ? exits[d].name : '?')} – ${esc(exits[d].teaser)}${exits[d].journeys > 1 ? ' (2 journeys)' : ''}</p>`).join('')}` };
 }
 
 export function helpPanel() {

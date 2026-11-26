@@ -179,6 +179,14 @@ button { font-family: inherit; color: var(--white); }
 .panel .choice { display: block; width: 100%; margin: 8px 0; padding: 8px 10px; font-size: 22px; text-align: left; background: var(--black);
   border: 2px solid var(--white); box-shadow: var(--shadow); cursor: pointer; }
 .panel .choice.on { background: var(--white); color: var(--black); }
+.panel .map { display: block; width: 100%; height: auto; margin: 6px 0; }
+.map line, .map path { stroke: var(--white); stroke-width: 2; fill: none; }
+.map line.uncrossed { stroke-dasharray: 2 5; stroke: var(--grey); }
+.map path.detour { stroke: var(--glow); stroke-dasharray: 7 5; }
+.map rect { fill: var(--black); stroke: var(--white); stroke-width: 2; }
+.map rect.here { stroke: var(--glow); stroke-width: 3; }
+.map text { fill: var(--white); font-family: inherit; font-size: 17px; text-anchor: middle; }
+.map text.small { fill: var(--grey); font-size: 14px; }
 .panel .note { color: var(--grey); font-size: 18px; }
 .clash { position: absolute; top: 176px; left: 16px; right: 16px; z-index: 6; text-align: center; }
 .clash .big { font-size: 72px; line-height: .9; color: var(--white); text-shadow: none; letter-spacing: 4px; }
