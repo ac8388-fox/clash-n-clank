@@ -31,9 +31,9 @@ export const TRAITS = {
 
   // CNTs
   // Injured: weakens one attribute. In the slice: −2 to that attribute's total
-  // (the trait records which attribute). Removed by a Herbalist, Physician,
-  // items, or events; none of those exist in Slice 1 yet.
-  injured:    { id: 'injured',    name: 'Injured',    kind: 'CNT', effect: '−2 to one attribute’s total', clearedBy: ['treatment'], totalPenalty: 2 },
+  // (the trait records which attribute). Treated by Sleeping at the Village
+  // (later also a Herbalist, Physician, items, or events); a wild Camp won't do.
+  injured:    { id: 'injured',    name: 'Injured',    kind: 'CNT', effect: '−2 to one attribute’s total', clearedBy: ['treatment', 'villageSleep'], totalPenalty: 2 },
 };
 
 // The five combat TPTs Pray picks from (Build Spec → "Pray").

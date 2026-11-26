@@ -83,7 +83,7 @@ Percentages are the chance of rolling at least one lucky number.
 
 | Lucky dice rolled | Outcome |
 | --- | --- |
-| None | The enemy counters and you gain a TNT; in a trial, you get through but fall short badly (that stamina to 0 and a CNT) |
+| None | The enemy counters and you gain a TNT; in a trial, it counts as if no dice were rolled: a clean pass if the requirement is met, otherwise falling short by the real gap |
 | 1 | Critical ×2 |
 | 2 | Critical ×3 |
 | 3 or more | ×4, and so on |
@@ -140,7 +140,7 @@ Traits come in three durations, each with a positive and a negative form.
 | Severity | Trait | Type | Effect | Removed by |
 | --- | --- | --- | --- | --- |
 | Light | Bruised | TNT | Disadvantage on attacks with the bruised limb | Sleep |
-| Moderate | Injured | CNT | Weakens one attribute or limb | Herbalist, Physician, items, or events |
+| Moderate | Injured | CNT | Weakens one attribute or limb | Herbalist, Physician, items, events, or Sleeping somewhere safe such as the Village (not a wild Camp) |
 | Severe | Maimed | CNT | Seriously weakens a limb or attribute | Physician's Surgery, or a specific item or event |
 
 **Trait list**

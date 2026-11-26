@@ -133,6 +133,18 @@ test('Steeled shrugs off a trial’s TNT; the same TNT doesn’t stack', () => {
   const r = T.attemptTrial(c, closeFortune(s.world), { dir: 'down' });
   ok(!r.character.traits.some(t => t.id === 'dazed' || t.id === 'steeled'), 'Steeled used, no Dazed');
 });
+test('Sleeping at the Village treats Injured; sleeping at a wild Camp does not', () => {
+  const night = (eventId) => ({ ...run().world, eventId, timeOfDay: 'Night' });
+  const hurt = () => { const c = noRacial(run().character); c.traits.push({ id: 'injured', kind: 'CNT', attr: 'AGI' }); return c; };
+  const village = W.campSleep(hurt(), night('village'));
+  ok(village.ok && !village.character.traits.some(t => t.id === 'injured'), 'treated at the Village');
+  eq(village.treated.map(t => t.attr), ['AGI']);
+  eq(attrTotal(village.character, 'AGI'), 6, 'AGI total back to normal');
+  eq(village.character.attrs.AGI.stamina, 6, 'and full after the night');
+  const camp = W.campSleep(hurt(), night('gorge'));
+  ok(camp.ok && camp.character.traits.some(t => t.id === 'injured'), 'still Injured after a wild Camp');
+  eq(camp.character.attrs.AGI.stamina, 4, 'sleeps to full, but the total is still 2 lower');
+});
 test('Rest clears the temporary setbacks; Injured stays', () => {
   const c = noRacial(run().character);
   c.traits.push({ id: 'dazed', kind: 'TNT' }, { id: 'winded', kind: 'TNT' }, { id: 'injured', kind: 'CNT', attr: 'STR' });
@@ -187,12 +199,26 @@ function findTrialLucky(want) {
   }
   throw new Error('no seed');
 }
-test('Trial lucky attempt: any lucky number is a clean pass; none falls short badly (Injured, whatever the gap)', () => {
+test('Trial lucky attempt: any lucky number is a clean pass; none counts as falling short by the real gap', () => {
   const win = findTrialLucky(true);
   eq(win.r.outcome, 'success'); eq(win.r.character.attrs.WIS.stamina, 6);
-  const lose = findTrialLucky(false);
+  const lose = findTrialLucky(false);                       // Study the knots: WIS 6 vs 7, 1 short
   eq(lose.r.outcome, 'shortfall');
-  ok(lose.r.character.traits.some(t => t.id === 'injured' && t.attr === 'WIS'), 'Injured even though only 1 short');
+  eq(lose.r.character.attrs.WIS.stamina, 0);
+  ok(lose.r.character.traits.some(t => t.id === 'dazed' && t.kind === 'TNT'), 'the TNT for 1 short, as without the dice');
+  ok(!lose.r.character.traits.some(t => t.id === 'injured'), 'not Injured');
+});
+test('Trial lucky attempt with no lucky number, when the requirement is met: still a clean pass', () => {
+  for (let seed = 1; seed < 20000; seed++) {
+    const c = noRacial(run('human', seed).character); c.attrs.WIS.stamina = 7;
+    const s = goTo({ character: c, world: run('human', seed).world }, 'S');
+    if (!s.world.trial.fortune.open) continue;
+    const r = T.attemptTrial(c, s.world, { dir: 'down', lucky: true });
+    if (r.lines[0].startsWith('Lucky!')) continue;
+    eq(r.outcome, 'success'); eq(r.character.attrs.WIS.stamina, 7);
+    return;
+  }
+  throw new Error('no seed');
 });
 test('Forced lucky attempt: when the only option left can’t be met, it rolls the dice', () => {
   ok(T.attemptTrial, 'exists');

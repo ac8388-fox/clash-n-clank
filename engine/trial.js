@@ -8,6 +8,7 @@
 //   – fall short: they still get through, but that attribute's stamina drops
 //     to 0 and they gain a negative trait (rules.js → trialSetback): a TNT
 //     for a shortfall of 1–3, or a CNT (Injured, −2 to that total) for 4+.
+//     Injured is treated by Sleeping at the Village (engine/world.js).
 //
 // Racial ability (slice version): while it is ready, it replaces the weakest
 // option (the biggest gap between requirement and the attribute's total) and
@@ -15,7 +16,8 @@
 //
 // Lucky attempts: a Fortune opening (5% + Luck%, rolled each visit) lets the
 // player tap the star and hold an option. Any lucky number is a clean pass;
-// none falls short badly: stamina to 0 and the CNT, whatever the shortfall.
+// none counts the same as without the dice: a clean pass if the requirement
+// is met, otherwise falling short by the real gap.
 // When the only option left can't be met, it becomes a lucky attempt.
 //
 // Pure functions: they return new character and world objects. Randomness goes
@@ -90,7 +92,7 @@ function gainSetback(c, setback, lines) {
   }
   c.traits.push({ ...setback, source: 'trial' });
   lines.push(setback.kind === 'CNT'
-    ? `It costs you: you are ${setbackName(setback)}, −2 to your ${setback.attr} total until it is treated.`
+    ? `It costs you: you are ${setbackName(setback)}, −2 to your ${setback.attr} total until you sleep at the Village.`
     : `It costs you: you are ${TRAITS[setback.id].name} (${TRAITS[setback.id].effect}).`);
 }
 
@@ -129,8 +131,12 @@ export function attemptTrial(characterIn, worldIn, choice) {
         clean = true;
         lines.push(`Lucky! (${shown}) ${o.label} works against the odds.`);
       } else {
-        setback = { id: 'injured', kind: 'CNT', attr: o.attr };
-        lines.push(`No luck. (${shown}) ${o.label}: you get through, but it goes badly.`);
+        // No lucky number: it counts as falling short by the real gap (no cost if there is none).
+        setback = trialSetback(o.attr, shortfall);
+        clean = !setback;
+        lines.push(clean
+          ? `No luck. (${shown}) ${o.label}: no matter, you manage it anyway (${o.attr} ${stamina} against ${o.requirement}).`
+          : `No luck. (${shown}) ${o.label}: short by ${shortfall}. You force your way through.`);
       }
     } else if (shortfall === 0) {
       clean = true;

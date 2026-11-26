@@ -75,11 +75,17 @@ export function go(worldIn, character, dir) {
 
 // Camp: Rest (+50% of each total, one part of the day) or Sleep (Evening or
 // Night only: full stamina, clears temporary traits, wakes in the Morning).
+// Sleeping somewhere safe (the Village) also treats Injured; sleeping at a
+// wild Camp does not.
 export function campRest(character, world) {
   return rest(character, world);
 }
 export function campSleep(character, world) {
-  return sleep(character, world);
+  if (!canSleep(world)) return sleep(character, world);
+  // Treat injuries first, so the night's sleep fills the restored totals.
+  const treated = getEvent(world.eventId).safeSleep ? character.traits.filter(t => t.id === 'injured') : [];
+  const c = treated.length ? { ...character, traits: character.traits.filter(t => t.id !== 'injured') } : character;
+  return { ...sleep(c, world), treated };
 }
 export { canSleep };
 

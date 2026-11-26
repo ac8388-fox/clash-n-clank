@@ -192,7 +192,9 @@
       const r = campSleep(g.character, g.world);
       if (!r.ok) { say([r.reason]); return; }
       g.character = r.character; g.world = r.world;
-      say([`You sleep through the night and wake in the Morning, fully rested. Day ${g.world.day}.`]);
+      const healed = r.treated && r.treated.length ? ` Your injuries are tended: no longer Injured (${r.treated.map(t => t.attr).join(', ')}).` : '';
+      const still = !healed && g.character.traits.some(t => t.id === 'injured') ? ' Your injury still aches; it needs the Village.' : '';
+      say([`You sleep through the night and wake in the Morning, fully rested. Day ${g.world.day}.${healed}${still}`]);
     }
     leaveCamp();
   }
@@ -338,7 +340,11 @@
       if (g.combat.enemy.enraged) bits.push('<span class="cond">Enraged</span>');
     }
     for (const t of c.traits.filter(t => t.kind === 'TPT')) bits.push(`<span class="tpt">${TRAITS[t.id].name}${t.left ? ` (${t.left})` : ''}</span>`);
-    for (const t of c.traits.filter(t => t.kind === 'TNT' || t.kind === 'CNT')) bits.push(`<span class="cond">${TRAITS[t.id].name}${t.attr ? ` (${t.attr} −2)` : ''}</span>`);
+    for (const t of c.traits.filter(t => t.kind === 'TNT' || t.kind === 'CNT')) {
+      bits.push(t.id === 'injured'
+        ? `<span class="cond">Injured (${t.attr}) – sleep at the Village to treat</span>`
+        : `<span class="cond">${TRAITS[t.id].name}</span>`);
+    }
     bits.push(`Draughts ×${(c.pack.find(p => p.itemId === 'herbalDraught') || { qty: 0 }).qty}`);
     $('status').innerHTML = bits.join(' · ');
 
