@@ -42,6 +42,7 @@
   import { runAll } from './harness.js';
   import './rules.test.js';
   import './combat.test.js';
+import './ui.test.js';
 
   const all = await runAll({ includeSlow: false });
   const skipped = all.filter(r => r.skipped);

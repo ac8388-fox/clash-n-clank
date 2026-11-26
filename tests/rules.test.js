@@ -173,34 +173,45 @@ test('Luck ignores current stamina', () => {
 
 // --- Clues -------------------------------------------------------------------
 
-test('Clues: 1, +1 per 20 of WIS + FAI total', () => {
-  eq(R.cluesShown({ wisTotal: 6, faiTotal: 6, luck: 6, tellCount: 5 }), 1);
-  eq(R.cluesShown({ wisTotal: 10, faiTotal: 9, luck: 6, tellCount: 5 }), 1);
-  eq(R.cluesShown({ wisTotal: 12, faiTotal: 8, luck: 6, tellCount: 5 }), 2);
-  eq(R.cluesShown({ wisTotal: 25, faiTotal: 15, luck: 6, tellCount: 5 }), 3);
-});
-test('Clues: +1 at Luck 20 and +1 at Luck 40', () => {
-  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 19, tellCount: 5 }), 1);
-  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 20, tellCount: 5 }), 2);
-  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 40, tellCount: 5 }), 3);
-});
-test('Clues: every starting race sees one clue as a Level 1 Fighter', () => {
-  for (const race of RACES) {
-    const c = S.createCharacter({ name: 'T', raceId: race.id, luckyNumber: 1, occupationId: 'knight' });
-    const t = R.attrTotals(c);
-    eq(R.cluesShown({ wisTotal: t.WIS, faiTotal: t.FAI, luck: R.luckOf(c), tellCount: 2 }), 1, race.name);
+test('Tells: a bigger WIS + FAI lead means fewer hidden moves and more second clues', () => {
+  let prev = R.tellOdds(-30);
+  for (let score = -25; score <= 30; score += 5) {
+    const o = R.tellOdds(score);
+    ok(o.none <= prev.none && o.both >= prev.both, `score ${score}`);
+    prev = o;
   }
 });
-test('Clues: at most the step’s number of tells; one fewer at Night', () => {
-  eq(R.cluesShown({ wisTotal: 30, faiTotal: 30, luck: 40, tellCount: 2 }), 2);
-  eq(R.cluesShown({ wisTotal: 30, faiTotal: 30, luck: 40, tellCount: 2, night: true }), 1);
-  eq(R.cluesShown({ wisTotal: 6, faiTotal: 6, luck: 6, tellCount: 2, night: true }), 0);
+test('Tells: never 0% and never 100%, even with a huge lead or deficit', () => {
+  for (const score of [-200, -40, 0, 40, 200]) {
+    const o = R.tellOdds(score);
+    for (const k of ['none', 'one', 'both']) ok(o[k] > 0 && o[k] < 1, `${k} at ${score}: ${o[k]}`);
+    ok(Math.abs(o.none + o.one + o.both - 1) < 1e-9, 'adds to 1');
+  }
+  ok(R.tellOdds(200).none >= 0.02 && R.tellOdds(-200).both >= 0.02, 'the odd tell either way');
 });
-test('Hiding: high WIS + FAI and Luck lower an enemy’s chance to hide a little, never to zero', () => {
-  eq(R.hideChance(0.3, { wisTotal: 0, faiTotal: 0, luck: 0 }), 0.3);
-  ok(Math.abs(R.hideChance(0.3, { wisTotal: 6, faiTotal: 6, luck: 8 }) - 0.24) < 1e-9, 'Human Fighter: 20% lower');
-  eq(R.hideChance(0.3, { wisTotal: 60, faiTotal: 60, luck: 90 }), 0.15);
-  ok(R.hideChance(0.3, { wisTotal: 999, faiTotal: 999, luck: 999 }) > 0, 'never zero');
+test('Tells: a starting Human Fighter at full stamina (lead 7–8) mostly sees one clue', () => {
+  for (const lead of [7, 8]) {
+    const o = R.tellOdds(lead);
+    ok(o.none > 0.17 && o.none < 0.27, `none ${o.none.toFixed(3)} (about 1 in 4 or 5)`);
+    ok(o.both > 0.2 && o.both < 0.3, `both ${o.both.toFixed(3)} (about 1 in 4)`);
+    ok(o.one > 0.45, `one ${o.one.toFixed(3)} (most of the time)`);
+  }
+});
+test('Tells: the reading lead uses current WIS + FAI stamina, not totals', () => {
+  const c = human();
+  eq(R.readingLead(c, { STR: 9, AGI: 9, WIS: 3, FAI: 2 }), 12 - 5);
+  c.attrs.WIS.stamina = 1;
+  eq(R.readingLead(c, { STR: 9, AGI: 9, WIS: 3, FAI: 2 }), 7 - 5);
+});
+test('Clues: +1 at Luck 20 and Luck 40, flat bonuses, at most the step’s tells, one fewer at Night', () => {
+  eq(R.cluesShown({ tier: 1, luck: 19 }), 1);
+  eq(R.cluesShown({ tier: 0, luck: 20 }), 1);
+  eq(R.cluesShown({ tier: 0, luck: 40, tellCount: 5 }), 2);
+  eq(R.cluesShown({ tier: 1, clueBonus: 1 }), 2);
+  eq(R.cluesShown({ tier: 1, clueBonus: -1 }), 0);
+  eq(R.cluesShown({ tier: 2, luck: 40 }), 2, 'capped at the step’s two tells');
+  eq(R.cluesShown({ tier: 2, night: true }), 1);
+  eq(R.cluesShown({ tier: 1, night: true }), 0);
 });
 
 // --- Fortune openings and lucky dice ---------------------------------------

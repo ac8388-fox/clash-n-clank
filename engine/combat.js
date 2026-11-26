@@ -33,11 +33,13 @@
 
 import { getEnemy, COUNTER } from '../data/enemies.js';
 import { getAbility } from '../data/abilities.js';
-import { getWeapon, ARMOR, CONSUMABLES } from '../data/items.js';
+import { getWeapon, WEAPONS, ARMOR, CONSUMABLES } from '../data/items.js';
+import { ABILITIES } from '../data/abilities.js';
 import { TRAITS, PRAY_TPTS } from '../data/traits.js';
 import {
   ATTRS, attrTotals, luckOf, cluesShown, rollFortune, rollLuckyDice, luckyResult,
-  computeHit, blockResult, applyDamage, damageCharacter, isDefeated, staminaOf, hideChance,
+  computeHit, blockResult, applyDamage, damageCharacter, isDefeated, staminaOf,
+  tellOdds, readingLead, luckClueBonus,
   useAttribute, actionAttribute, isPredictable, tickCooldowns, restoreStamina,
   lowestPool, applyCombatFatigue, wearItem, isBroken, missChance, inReach,
 } from './rules.js';
@@ -316,6 +318,44 @@ export function attacksInteract({ playerTarget, enemyTarget, playerSpeed, enemyS
 }
 
 // ---------------------------------------------------------------------------
+// Reading the enemy (tells)
+// ---------------------------------------------------------------------------
+
+// Reading bonuses from everything the character has: traits (TPT, TNT, CPT,
+// CNT, PPT, PNT), learned abilities, and equipped items. Each can carry
+// `read` (points on the reading score) and `clues` (a flat change in clues).
+export function readingModifiers(character) {
+  let read = 0, clues = 0;
+  const add = (src) => { if (src) { read += src.read || 0; clues += src.clues || 0; } };
+  for (const t of character.traits || []) add(TRAITS[t.id]);
+  for (const id of character.abilities || []) add(ABILITIES[id]);
+  const g = character.gear || {};
+  for (const id of [...(g.ready || []), ...Object.values(g.armor || {}), g.shield].filter(Boolean)) add(WEAPONS[id] || ARMOR[id]);
+  return { read, clues };
+}
+
+// This exchange's reading: score = WIS + FAI lead + bonuses (an Enraged enemy
+// is harder to read: −2), and the odds of none / one / both clues.
+export const ENRAGED_READ = -2;
+export function readingFor(character, combat) {
+  const mods = readingModifiers(character);
+  const lead = readingLead(character, combat.enemy.stamina);
+  const score = lead + mods.read + (combat.enemy.enraged ? ENRAGED_READ : 0);
+  return { lead, score, clues: mods.clues, odds: tellOdds(score) };
+}
+
+// A plain word for how well the player is reading the enemy right now:
+// expected clues (after Luck, traits, and Night) of 1.25+ is good, under 0.8 poor.
+export function readingLabel(character, combat) {
+  const rd = readingFor(character, combat);
+  const bonus = luckClueBonus(luckOf(character)) + rd.clues;
+  const night = combat.timeOfDay === 'Night' ? 1 : 0;
+  const count = (t) => Math.max(0, Math.min(2, t + bonus) - night);
+  const expected = rd.odds.none * count(0) + rd.odds.one * count(1) + rd.odds.both * count(2);
+  return { label: expected >= 1.25 ? 'good' : expected >= 0.8 ? 'fair' : 'poor', expected, odds: rd.odds };
+}
+
+// ---------------------------------------------------------------------------
 // Start a fight
 // ---------------------------------------------------------------------------
 
@@ -382,24 +422,18 @@ export function beginExchange(character, combatIn) {
   while (pick < odds.length - 1 && r >= odds[pick]) { r -= odds[pick]; pick++; }
   const variant = step.variants[pick];
 
-  // 2. Clues: maybe nothing at all; otherwise the shared first clue, then the
-  //    variant's second clue if the player perceives it.
-  const totals = attrTotals(c);
+  // 2. Clues: roll how much the player reads (none, one, or both clues) from
+  //    the WIS + FAI comparison, then apply Luck, traits, and Night.
   const luck = luckOf(c);
-  // An Enraged enemy is wilder and harder to read: it hides 1.5× as often.
-  const hideBase = (enemy.hideChance || 0) * (E.enraged ? 1.5 : 1);
-  const hidden = step.when !== 'below50' &&
-    rng.next() < hideChance(hideBase, { wisTotal: totals.WIS, faiTotal: totals.FAI, luck });
-  const hiddenCaption = hidden ? enemy.hiddenCaptions[Math.floor(rng.next() * enemy.hiddenCaptions.length)] : null;
-
-  let extra = 0;
-  if (hasTrait(c, 'focused')) extra += 1;
-  if (hasTrait(c, 'dazed')) extra -= 1;
+  const reading = readingFor(c, combat);
+  const r2 = rng.next();
+  let tier = r2 < reading.odds.none ? 0 : r2 < reading.odds.none + reading.odds.both ? 2 : 1;
+  if (step.when === 'below50') tier = Math.max(tier, 1);      // the howl is never hidden
   const all = variantTells(enemy, step, variant);
-  const clueCount = hidden ? 0 : cluesShown({
-    wisTotal: totals.WIS, faiTotal: totals.FAI, luck,
-    tellCount: all.length, night: combat.timeOfDay === 'Night', extra,
-  });
+  const beforeNight = Math.min(all.length, Math.max(0, tier + luckClueBonus(luck) + reading.clues));
+  const hidden = beforeNight === 0 && tier === 0;            // the enemy gives nothing away
+  const hiddenCaption = hidden ? enemy.hiddenCaptions[Math.floor(rng.next() * enemy.hiddenCaptions.length)] : null;
+  const clueCount = Math.max(0, beforeNight - (combat.timeOfDay === 'Night' ? 1 : 0));
 
   const fortuneOpen = rollFortune(luck, rng);
   const hint = fortuneOpen ? enemy.fortuneHints[Math.floor(rng.next() * enemy.fortuneHints.length)] : null;

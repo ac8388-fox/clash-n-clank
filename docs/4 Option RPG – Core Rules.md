@@ -10,7 +10,7 @@ The game is a text-first, four-option RPG for mobile (playable on desktop) in a 
 - **One Almighty God.** Lesser spiritual beings exist beneath Him, some loyal and some fallen, in the spirit of C.S. Lewis, Brian Godawa, and Michael Heiser. Miracles are prayers God answers, not spells a character owns.
 - **Giant-kin enemies** (the Nephilim idea) appear under a name still to be created.
 - **Information, not certainty:** attributes and traits improve the clues a player gets, never the correctness of their choice. The single exception is the Prophet's Foretell miracle.
-- **Enemies follow learnable patterns, with feints:** each enemy runs through a pattern of moves in order. At every step it usually makes the step's main move, but sometimes feints: it makes a different move that begins with the same first clue. The second clue gives the feint away, but most characters perceive only the first: reading feints takes high WIS + FAI, high Luck, or a trait like Focused, and others must guess. Some exchanges an enemy hides its intent entirely (no clues and a neutral caption such as "It watches you."); each enemy has its own chance of hiding, which high WIS + FAI and Luck lower a little but never to zero. Enemies also Block: some pattern moves are Blocks with their own clues, an enemy may flinch and Block the spot it was just hit hard, and it Blocks more readily where the player keeps striking. Repeating the same action at the same target two exchanges running draws a counter. Rare titled elites adapt to the player further.
+- **Enemies follow learnable patterns, with feints:** each enemy runs through a pattern of moves in order. At every step it usually makes the step's main move, but sometimes feints: it makes a different move that begins with the same first clue. The second clue gives the feint away. How much a character reads each exchange comes from comparing their current WIS + FAI stamina with the enemy's (see **Tells**): sometimes the enemy hides its intent entirely (no clues and a neutral caption such as "It watches you."), usually the character catches the first clue, and sometimes both. Enemies also Block: some pattern moves are Blocks with their own clues, an enemy may flinch and Block the spot it was just hit hard, and it Blocks more readily where the player keeps striking. Repeating the same action at the same target two exchanges running draws a counter. Rare titled elites adapt to the player further.
 
 ## Attributes, stamina, and Luck
 
@@ -65,7 +65,7 @@ Four attributes (STR, AGI, WIS, FAI) double as stamina, and Luck is calculated f
 Abilities and combat never roll. Luck adds an optional gamble: when a Fortune opening appears, the player can attach a roll to an action for a Critical, at the risk of a penalty.
 
 - **Fortune openings:** a glowing star and a hint in the scene ("He slips on the wet stone"). They appear more often with higher Luck. The Explorer always has one.
-- **Gambling:** long-press the action (Shift-click on desktop). Without an opening, a long-press does nothing.
+- **Gambling:** tap the glowing Fortune star to arm it, then hold the action for half a second (on desktop, click the star or press L, then hold). Without an opening there is no star to arm.
 - **Lucky number:** chosen at character creation, 1 to 4 (Explorer: 1 or 2).
 - **Dice:** 1, plus 1 per 10 Luck, to a maximum of 7. Each added die is smaller.
 
@@ -315,6 +315,8 @@ Combat is simultaneous action with pauses: time stops, the player reads the enem
 **The exchange**
 
 1. Time pauses and the player receives clues about the enemy's intent: sight, sound, speech, movement, environment, and habit. Some exchanges the enemy gives nothing away.
+
+**Tells:** each exchange, compare the player's current WIS + FAI stamina with the enemy's. The bigger the player's lead, the less often the enemy hides its intent (no clue at all) and the more often the second clue (the one that exposes a feint) shows; the bigger the enemy's lead, the opposite. It is never certain either way: even a big lead misses the odd move, and even a big deficit catches the odd tell. Luck still adds a clue at 20 and again at 40, Night still takes one away, and abilities, traits (TPTs, TNTs, CPTs, CNTs, PPTs, PNTs), and items can add or subtract (Focused +1 clue, Dazed −1). An Enraged enemy is harder to read. The character screen shows how well the character is reading the enemy right now: good, fair, or poor.
 2. The player picks an action (Pray, Attack, Block, Item, or an ability) and, for attacks and blocks, a target: Head, Left, Right, or Legs, always from the player's perspective.
 3. Both actions resolve, faster first. A faster attack can stop a slower one only if it carries a trait, such as a Stagger; the slower action takes a disadvantage.
 
@@ -392,7 +394,7 @@ The screen is a tall vertical diamond of four choices under a text-and-pixel-art
 
 | Input | Mobile | Desktop |
 | --- | --- | --- |
-| Choose an action, ability, or target | Press and hold for one second (a bar fills inside the button) | Hold the mouse button, or hold an arrow key, for one second |
+| Choose an action, ability, or target | Press and hold for half a second (a bar fills inside the button) | Hold the mouse button, or hold an arrow key, for half a second |
 | Page the carousel | Swipe left or right | Mouse wheel or Q / E |
 | Back or cancel | Swipe down | Backspace or Esc |
 | Details (reserved) | Swipe up | — |
@@ -402,7 +404,7 @@ The screen is a tall vertical diamond of four choices under a text-and-pixel-art
 - Page 1 is always Pray, Attack, Block, Item; every combat-usable ability (class, racial, occupation) fills later pages, four at a time, and the loop returns to page 1.
 - New abilities are added to the next open slot; outside combat, the player can rearrange them.
 - Spent abilities stay in place, grayed out with their reset condition, so positions never shift.
-- After choosing Attack or Block, the diamond becomes Head, Left, Right, Legs. A choice commits only after a one-second hold, which prevents accidental taps and double clicks; letting go early cancels, and swipe down backs out. For a lucky attempt, tap the glowing Fortune star to arm it, then hold the action.
+- After choosing Attack or Block, the diamond becomes Head, Left, Right, Legs. A choice commits only after a half-second hold, which prevents accidental taps and double clicks; letting go early cancels, and swipe down backs out. For a lucky attempt, tap the glowing Fortune star to arm it, then hold the action.
 
 **Style:** four colors only: black background, white text and pixel graphics, light always falls from the upper left, so white highlights sit on top and left edges and a sky blue (#5BC8F5) shadow falls to the lower right of outlines, icons, and objects (never text), and red for danger and heat: enemy names and eyes, blood, fire, torches, and the setting sun. The map is the one place with more detail, in the spirit of old DOS and roguelike maps.
 

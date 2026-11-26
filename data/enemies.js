@@ -15,9 +15,9 @@
 // main move from a feint. feintChance is how often the enemy picks a feint
 // (split evenly between the feints). Some variants are Blocks.
 //
-// Hiding: hideChance is how often the enemy gives nothing away (no clues, and
-// one of its hiddenCaptions instead of the step's caption). High WIS + FAI and
-// Luck lower it a little (engine/rules.js → hideChance).
+// Hiding: how often the enemy gives nothing away (no clues, and one of its
+// hiddenCaptions instead of the step's caption) comes from comparing the
+// player's WIS + FAI stamina with the enemy's (engine/rules.js → tellOdds).
 //
 // Blocking steps the engine builds when they apply:
 //   flinch – right after the player lands a hard hit (hardHit damage or more),
@@ -42,10 +42,9 @@ export const ENEMIES = {
     art: 'werewolf',
     range: 'Close',
     line: 'Grrrhh…',
-    attrs: { STR: 6, AGI: 6, WIS: 3, FAI: 2 },
-    damageBonus: 3,
+    attrs: { STR: 9, AGI: 9, WIS: 3, FAI: 2 },
+    damageBonus: 2,
     feintChance: 0.47,
-    hideChance: 0.25,
     luck: 6,
     hiddenCaptions: ['It watches you.', 'It paces, giving nothing away.'],
     hardHit: 3,
@@ -137,10 +136,9 @@ export const ENEMIES = {
     art: 'barrow-knight',
     range: 'Approach',
     line: 'Turn back.',
-    attrs: { STR: 5, AGI: 2, WIS: 4, FAI: 0 },
-    damageBonus: 4,
+    attrs: { STR: 10, AGI: 2, WIS: 4, FAI: 0 },
+    damageBonus: 3,
     feintChance: 0.48,
-    hideChance: 0.31,
     luck: 6,
     hiddenCaptions: ['The knight stands still.', 'Its visor gives nothing away.'],
     hardHit: 3,

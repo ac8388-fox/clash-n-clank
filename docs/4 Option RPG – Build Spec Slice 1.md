@@ -56,7 +56,7 @@ Travel is the hub: every event ends by returning to the travel diamond, and the 
 | Combat | Diamond carousel, targeting, clues, Clash event, dice overlay | Werewolf, Barrow Knight |
 | Camp | Rest or Sleep, results shown | — |
 | Menu | Settings (incl. Display), Save Game, Journal, Map, Help, Quit to Title | Gorge (open) |
-| Character | Attributes (stamina / total), Luck, traits, class, occupation | — |
+| Character | Attributes (stamina / total), Luck, traits, class, occupation; in combat, a plain line such as “Reading the werewolf: fair” (good / fair / poor) | — |
 | Inventory | Ready weapons, pack, armor slots, consumables | — |
 | End | Victory or defeat summary, then Title | — |
 
@@ -169,8 +169,9 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Empty stamina | While a pool is 0, each action using it lowers that attribute's Natural total by 1 |
 | Defeat | All four pools at 0 |
 | Luck | \|STR − AGI\| + \|WIS − FAI\| on Natural + Class, plus race modifier and unique gear; never below race starting Luck |
-| Clues shown | 1, +1 per 20 of (WIS + FAI) total, +1 at Luck 20, +1 at Luck 40, +1 while Focused; at most the step's number of tells (2: the shared first clue, then the clue that tells the main move from a feint); one fewer at Night. Every starting character sees one clue; the second needs high WIS + FAI, high Luck, or Focused. None at all when the enemy hides its intent |
-| Hiding intent | Each exchange the enemy may give nothing away (no clues, a neutral caption). Chance = the enemy's hide chance × (1 − (WIS + FAI + Luck)%), the cut capped at half, so never zero. A Human Fighter (12 + 8 = 20) cuts it by 20%. An Enraged enemy hides 1.5× as often. The once-only below-half step is never hidden |
+| Tells | Each exchange: reading score = (player's current WIS + FAI stamina) − (enemy's current WIS + FAI stamina) + reading bonuses from traits, abilities, and equipped items (an Enraged enemy −2). Odds of **no clue** = 3% + 87% × S(−(score − 2.4) ÷ 4) and of **both clues** = 3% + 92% × S((score − 12.1) ÷ 4), where S is a smooth S-curve from 0 to 1; otherwise **one clue**. Never 0%, never 100%. Rolled with the seeded random function. A starting Human Fighter at full stamina (lead 7–8) sees no clue about 1 exchange in 4 or 5, one clue about half the time, and both about 1 in 4 |
+| Clues shown | The rolled 0, 1, or 2, then +1 at Luck 20 and Luck 40, flat bonuses (Focused +1, Dazed −1), at most the step's two tells, and one fewer at Night. A roll of 0 that stays 0 is a hidden move: no clue chips and a neutral caption. The once-only below-half step is never hidden |
+| Reading label | Expected clues this exchange (after Luck, traits, and Night): 1.25 or more “good”, 0.8 or more “fair”, less “poor” |
 | Enemy Blocks | An enemy Block on the spot the player attacks stops the hit (halved instead if the enemy is Off-Balance); it isn't attacking that exchange, so Pray gives two TPTs. Blocks come from pattern moves, a **flinch** (after the player lands a hard hit, with the enemy's flinch chance, never twice running: usually Blocks the spot just hit), and a **guard** (when the player attacked the same spot in 2 of their last 3 exchanges, with the enemy's guard chance: usually Blocks that spot) |
 | Fortune opening | Seeded chance per exchange or trial: 5% + Luck%, capped at 50% (Explorer: always) |
 | Lucky dice | 1 + 1 per 10 Luck, max 7: d20, d12, d10, d8, d6, d4, d4 |
@@ -196,7 +197,7 @@ These are the formulas and starting numbers to code. Everything is deterministic
 Each exchange runs the same eight steps, in this order.
 
 1. **Enemy commits.** Work out the possible steps: the current pattern step (or a step whose `when` condition is true), a counter if the player repeated themselves, a flinch after a hard hit, or a guard on a spot the player keeps striking. Pick one, then its main move or a feint, with the seeded random function. Its action, weapon, and target are fixed before the player chooses.
-2. **Clues.** Roll whether the enemy hides its intent; if it does, show no clue chips and one of its neutral captions. Otherwise show as many of that step's two tells as the player's clue count allows (first the shared clue, then the one that gives a feint away), as text in the narrative and as chips with a gaze caption above the enemy. Roll for a Fortune opening.
+2. **Clues.** Compare WIS + FAI stamina and roll how many tells the player reads (none, one, or both), then apply Luck, traits, and Night. If none and the enemy hid its intent, show no clue chips and one of its neutral captions. Otherwise show as many of that step's two tells as the player reads (first the shared clue, then the one that gives a feint away), as text in the narrative and as chips with a gaze caption above the enemy. Roll for a Fortune opening.
 3. **Player chooses.** Action (Pray, Attack, Block, Item, or an ability from the carousel), then a target (Head, Left, Right, Legs) for attacks and blocks. Tapping the Fortune star, then holding the action, attaches a lucky attempt when an opening is showing.
 4. **Order by speed.** Basic Attacks use the weapon's speed and abilities their listed speed; Hindered and Speed advantage shift one tier. The slower side takes Disadvantage.
 5. **Attacks meet.** Two attacks meet when their speeds are equal or one step apart (Swift and Fair, Fair and Drawn); Swift and Drawn never meet. When they meet: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance, but only if both are hard weapons (blades, hafts, gauntlets, shields); if either is a natural weapon (claws, bites, fists, hand wraps) there is no interaction. The same label (Left vs Left, Head vs Head, Legs vs Legs) starts a Clash with any weapons. Head vs Legs, or a side vs a height, don't interact. In the slice the sword (Fair) meets claws (Swift), bites (Fair), and the greatsword (Drawn); the dagger (Swift) meets claws and bites but never the greatsword.
@@ -256,24 +257,26 @@ Stamina, damage, feint, hiding, flinch, and guard chances were tuned by simulati
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| Learned player wins | 86% | 79% |
-| Winners usually keep | 38% of total stamina (middle half 19–58%) | 54% (middle half 31–77%) |
-| Scrapes (under 20% left) | 26% of wins | 14% of wins |
-| Wins costing 40–70% | 46% | 55% |
+| Learned player wins | 87% | 86% |
+| Winners usually keep | 42% of total stamina (middle half 23–62%) | 62% (middle half 42–69%) |
+| Scrapes (under 20% left) | 22% of wins | 9% of wins |
+| Wins costing 40–70% | 38% | 30% |
 | Flawless (under 10% lost) | 4% | 5% |
-| Fight length | 10 exchanges (middle half 8–11) | 12 exchanges (middle half 8–14) |
-| Attacks that miss | 23% in all: 4.5% by chance, 18% situational (mostly an Off-Balance enemy after the player wins a Clash) | 19%: 4% by chance, 15% situational |
+| Fight length | 14 exchanges (middle half 11–15) | 18 exchanges (middle half 12–19) |
+| Clues during fights | none 27%, one 52%, both 21% | none 23%, one 49%, both 28% |
+| Attacks that miss | 26% in all: 5% by chance, 21% situational (mostly an Off-Balance enemy after the player wins a Clash) | 24%: 4% by chance, 21% situational |
 | Random buttons win | 0% | 0% |
+| Learned player at Night | 73% | 56% |
 
 The random-button target is not met: with these rules a player choosing at random loses almost every fight (random targets, blind Blocks, lost Clashes leaving it Off-Balance, and, against the knight, a dagger that can't reach). Making the enemies weak enough for random play to win 15–30% makes a pattern-reading player win nearly every fight unhurt. This is an open design question.
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| STR / AGI / WIS / FAI | 6 / 6 / 3 / 2 | 5 / 2 / 4 / 0 |
-| Damage bonus | +3 to every hit | +4 to every hit (few, heavy blows) |
+| STR / AGI / WIS / FAI | 9 / 9 / 3 / 2 | 10 / 2 / 4 / 0 |
+| Damage bonus | +2 to every hit | +3 to every hit |
 | Feint chance | 47% | 48% |
 | Luck (for misses) | 6 | 6 |
-| Hides its intent | 25% base (20% against a Human Fighter) | 31% base (25% against a Human Fighter) |
+| WIS + FAI (for tells) | 3 + 2 = 5 | 4 + 0 = 4 |
 | Neutral captions | “It watches you.” · “It paces, giving nothing away.” | “The knight stands still.” · “Its visor gives nothing away.” |
 | Flinch | 50% after a hit of 3 or more | 70% after a hit of 3 or more (rare: its armor soaks most hits) |
 | Guard | 35% when you keep striking one spot | 65% when you keep striking one spot |
@@ -287,7 +290,7 @@ In simulated play the werewolf Blocks in about 1 exchange in 8 (mostly flinching
 
 **Enemy patterns** (steps loop in order; a `when` jumps to that step)
 
-Every step has a shared first clue and caption, a **main** move, and one or two **feints**. The enemy makes the main move unless it feints (47% of the time for the werewolf, 48% for the knight, split evenly between a step's feints). Each move has its own second clue, so a player who perceives two clues can tell the main move from a feint; a starting character sees only the shared clue and must guess. Moves marked **Block** guard that spot: attack somewhere else.
+Every step has a shared first clue and caption, a **main** move, and one or two **feints**. The enemy makes the main move unless it feints (47% of the time for the werewolf, 48% for the knight, split evenly between a step's feints). Each move has its own second clue, so a player who perceives two clues can tell the main move from a feint; a player who sees only the shared clue must guess. Moves marked **Block** guard that spot: attack somewhere else.
 
 | Enemy | Step | First clue (shared) | Caption | Main move (second clue) | Feints (second clue) |
 | --- | --- | --- | --- | --- | --- |
@@ -327,13 +330,13 @@ Build the screens to match the mockups exactly; this lists the parts and behavio
 
 | Input | Mobile | Desktop |
 | --- | --- | --- |
-| Choose an option | Press and hold 1 second; a bar fills inside the button; letting go early cancels | Hold the mouse button, or hold an arrow key / WASD, 1 second |
+| Choose an option | Press and hold half a second; a bar fills inside the button; letting go early cancels | Hold the mouse button, or hold an arrow key / WASD, half a second |
 | Page the carousel (combat) | Swipe left or right | Q / E or mouse wheel |
 | Back or cancel | Swipe down | Backspace or Esc |
 | Lucky attempt (when an opening shows) | Tap the glowing Fortune star to arm it, then hold the action | Click the star (or press L), then hold the action |
 | Details (reserved) | Swipe up | — |
 
-**Carousel:** page 1 is Pray, Attack, Block, Item; abilities fill later pages four at a time in learning order, and the loop returns to page 1. Spent abilities stay in place, grayed out, showing their reset. Choosing Attack or Block turns the diamond into Head, Left, Right, Legs, and a choice commits only after the one-second hold, so accidental taps and double clicks do nothing.
+**Carousel:** page 1 is Pray, Attack, Block, Item; abilities fill later pages four at a time in learning order, and the loop returns to page 1. Spent abilities stay in place, grayed out, showing their reset. Choosing Attack or Block turns the diamond into Head, Left, Right, Legs, and a choice commits only after the half-second hold (one setting, `HOLD_SECONDS` in `ui/settings.js`), so accidental taps and double clicks do nothing.
 
 **Feedback**
 
@@ -372,9 +375,11 @@ Slice 1 is done when a new player can finish the loop on a phone without help, a
 - [ ] Travel from the Crossroads in all four directions, including Camp for the blocked West, with time advancing each journey
 - [ ] Pass and fail both trials; failure damages the right pool; the racial ability replaces the weakest option
 - [ ] Fight the werewolf and the Barrow Knight using the exchange loop, with clues and gaze captions
-- [ ] A starting character sees one clue; the second clue (which gives a feint away) needs high WIS + FAI, high Luck, or Focused; one fewer at Night
+- [ ] Tells come from comparing WIS + FAI stamina: a starting Human Fighter at full stamina sees no clue about 1 exchange in 4 or 5, one clue most of the time, and both about 1 in 4; a bigger lead shows more and a deficit less, never all or nothing; Luck, Focused, Dazed, and Night still apply
+- [ ] The character screen shows “Reading the <enemy>: good / fair / poor” in combat
 - [ ] Enemies sometimes feint: the first clue is shared, and the second clue gives the feint away
-- [ ] Enemies sometimes hide their intent (no clue chips, a neutral caption); the barrow knight hides more often than the werewolf, and high WIS + FAI or Luck lowers the chance a little
+- [ ] Enemies sometimes hide their intent (no clue chips, a neutral caption)
+- [ ] Choosing anything takes a half-second hold, with the fill bar inside the button
 - [ ] Enemies Block: a Block on the spot you attack stops your hit; Blocks have their own clues; the werewolf Blocks now and then (mostly after a hard hit), the barrow knight more often, and both Block more where you keep striking
 - [ ] Repeating the same action and target two exchanges running draws a counter
 - [ ] Clank, Clash, Block, Pray, Item, Plan B or Crusher, and cooldowns all behave as specified

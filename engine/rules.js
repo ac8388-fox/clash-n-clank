@@ -116,28 +116,50 @@ export function rollFortune(luck, rng, opts) {
 // Clues
 // ---------------------------------------------------------------------------
 
-// Clues: 1, +1 per 20 of (WIS + FAI) total, +1 at Luck 20, +1 at Luck 40; at
-// most the step's number of tells; one fewer at Night. `extra` covers traits
-// such as Focused (+1) or Dazed (−1). Every starting character sees one clue;
-// the second clue (the one that exposes a feint) needs high WIS + FAI, high
-// Luck, or a trait like Focused.
-export const CLUE_STEP = 20;
+// Tells (clues). Each exchange the player's reading is compared with the
+// enemy's: reading score = (player's current WIS + FAI stamina) − (enemy's
+// current WIS + FAI stamina) + any reading bonuses (traits, abilities, items).
+// The score sets the odds of seeing no clue, one clue, or both clues:
+//   none: from TELLS.noneHi (big deficit) down to TELLS.noneLo (big lead)
+//   both: from TELLS.bothLo (big deficit) up to TELLS.bothHi (big lead)
+// Smooth S-shaped curves, never 0% and never 100%. Then +1 clue at Luck 20
+// and Luck 40, flat clue bonuses (Focused +1, Dazed −1), at most the step's
+// number of tells, and one fewer at Night.
+export const TELLS = {
+  noneLo: 0.03, noneHi: 0.9, noneCenter: 2.4,    // score where "none" is halfway
+  bothLo: 0.03, bothHi: 0.95, bothCenter: 12.1,  // score where "both" is halfway
+  scale: 4,                                      // how gently the odds change per point
+};
 export const CLUE_LUCK = [20, 40];
-export function cluesShown({ wisTotal, faiTotal, luck, tellCount, night = false, extra = 0 }) {
-  let n = 1 + Math.floor((wisTotal + faiTotal) / CLUE_STEP);
-  for (const t of CLUE_LUCK) if (luck >= t) n += 1;
-  n += extra;
+
+const sigmoid = (x) => 1 / (1 + Math.exp(-x));
+
+// Odds of seeing no clue, one clue, or both, for a reading score.
+export function tellOdds(score) {
+  const T = TELLS;
+  const none = T.noneLo + (T.noneHi - T.noneLo) * sigmoid(-(score - T.noneCenter) / T.scale);
+  const both = T.bothLo + (T.bothHi - T.bothLo) * sigmoid((score - T.bothCenter) / T.scale);
+  const total = none + both;
+  const scaleDown = total > 1 ? 1 / total : 1;          // only if the two would overlap
+  return { none: none * scaleDown, one: 1 - (none + both) * scaleDown, both: both * scaleDown };
+}
+
+// The reading score before bonuses: player's WIS + FAI stamina minus the enemy's.
+export function readingLead(character, enemyStamina) {
+  return (character.attrs.WIS.stamina + character.attrs.FAI.stamina) - (enemyStamina.WIS + enemyStamina.FAI);
+}
+
+// +1 clue at Luck 20 and again at Luck 40.
+export function luckClueBonus(luck) {
+  return CLUE_LUCK.filter(t => luck >= t).length;
+}
+
+// Final clue count from a rolled tier (0, 1, or 2).
+export function cluesShown({ tier, luck = 0, clueBonus = 0, tellCount = 2, night = false }) {
+  let n = tier + luckClueBonus(luck) + clueBonus;
   n = Math.min(n, tellCount);
   if (night) n -= 1;
   return Math.max(0, n);
-}
-
-// How often an enemy hides its intent (no clues, a neutral caption). High
-// WIS + FAI and Luck lower it a little: by (WIS + FAI + Luck)%, at most half,
-// so it never reaches zero.
-export function hideChance(base, { wisTotal, faiTotal, luck }) {
-  const cut = Math.min(0.5, (wisTotal + faiTotal + Math.max(0, luck)) / 100);
-  return base * (1 - cut);
 }
 
 // ---------------------------------------------------------------------------

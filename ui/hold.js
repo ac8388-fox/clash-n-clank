@@ -1,11 +1,12 @@
 // Press-and-hold controls (Build Spec → Controls).
-// A choice commits only after a one-second hold; a bar fills inside the
-// button while you hold; letting go early cancels. Works with touch, mouse,
-// and keyboard (arrow keys or WASD, held for one second).
+// A choice commits only after a short hold (HOLD_SECONDS in ui/settings.js,
+// half a second); a bar fills inside the button while you hold; letting go
+// early cancels. Works with touch, mouse, and keyboard (arrow keys or WASD).
 
-export const HOLD_MS = 1000;
+import { HOLD_MS } from './settings.js';
+export { HOLD_MS };
 
-// Make a button commit after a one-second hold.
+// Make a button commit after the hold time.
 // The button needs a child element with class "fill" for the progress bar.
 export function attachHold(button, onCommit, { duration = HOLD_MS } = {}) {
   let start = 0, raf = 0, active = false, startX = 0, startY = 0;
@@ -50,7 +51,7 @@ export function attachHold(button, onCommit, { duration = HOLD_MS } = {}) {
   return { begin: () => begin(), cancel: stop, isActive: () => active };
 }
 
-// Keyboard: hold an arrow key or WASD for one second to choose that
+// Keyboard: hold an arrow key or WASD for the hold time to choose that
 // direction. getHold(dir) returns the hold controller for that direction.
 export function attachKeyboard({ getHold, onPage, onBack, onLucky }) {
   const KEYS = {

@@ -123,7 +123,7 @@
 
   <div id="result"></div>
   <div id="end"></div>
-  <p class="help">Hold a button for one second to choose. Swipe left or right for more actions; swipe down to go back. When a ★ appears, tap it, then hold an action for a lucky attempt.</p>
+  <p class="help" id="help">Hold a button for half a second to choose. Swipe left or right for more actions; swipe down to go back. When a ★ appears, tap it, then hold an action for a lucky attempt.</p>
   <div id="log"></div>
 
 <script type="module">
@@ -136,9 +136,11 @@
   import { TRAITS } from './data/traits.js';
   import { newSeed } from './engine/random.js';
   import { attachHold, attachKeyboard, attachSwipes } from './ui/hold.js';
+  import { holdWords } from './ui/settings.js';
+  import { readingLabel } from './engine/combat.js';
 
   const SAVE = 'clash-n-clank.practice';
-  const SAVE_VERSION = 5;   // bump when combat rules change; older saves start fresh
+  const SAVE_VERSION = 6;   // bump when combat rules change; older saves start fresh
   const DIRS = ['up', 'right', 'down', 'left'];
   const TARGET_OF = { up: 'head', left: 'left', right: 'right', down: 'legs' };
   const TARGET_NAME = { head: 'Head', left: 'Left', right: 'Right', legs: 'Legs' };
@@ -282,6 +284,7 @@
     const wid = character.gear.ready[P.weaponIndex];
     if (wid) bits.push(`In hand: ${getWeapon(wid).name} (${character.durability[wid]}/20)`);
     bits.push(`Luck ${luckOf(character)} · lucky number ${character.luckyNumber}`);
+    if (!combat.outcome) bits.push(`Reading the ${enemy.name.toLowerCase()}: ${readingLabel(character, combat).label}`);
     for (const c of P.conditions) bits.push(`<span class="cond">${TRAITS[c.id].name}</span>`);
     if (P.advantageNext) bits.push('<span class="tpt">Advantage next attack</span>');
     if (P.speedPenaltyNext) bits.push('<span class="cond">Next action slower</span>');
@@ -342,6 +345,7 @@
   $('back').addEventListener('click', back);
   $('star').addEventListener('click', toggleLucky);
   $('restart').addEventListener('click', newGame);
+  $('help').innerHTML = $('help').innerHTML.replace('half a second', holdWords());
 
   const saved = load();
   if (saved) {
