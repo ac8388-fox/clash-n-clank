@@ -1,0 +1,52 @@
+// Menu (top right): Settings (incl. Display), Save Game, Journal, Map, Help,
+// Quit to Title – dropping down over a dimmed screen.
+import { EVENTS, getEvent } from '../data/events.js';
+import { exitsFor } from '../engine/world.js';
+import { esc } from './render.js';
+import { holdWords } from './settings.js';
+import { DIR_WORD } from './common.js';
+
+export const DISPLAYS = [
+  { id: 'text', label: 'Text', note: 'Words only, no pictures.' },
+  { id: 'house', label: 'Graphic (house)', note: 'White, sky blue, and red on black.' },
+  { id: 'full', label: 'Graphic (full color)', note: 'The same scenes in full color.' },
+];
+
+export function menuOverlay(inRun) {
+  const items = [{ id: 'settings', label: 'Settings' }];
+  if (inRun) items.push({ id: 'save', label: 'Save Game' }, { id: 'journal', label: 'Journal' }, { id: 'map', label: 'Map' });
+  items.push({ id: 'help', label: 'Help' });
+  if (inRun) items.push({ id: 'quit', label: 'Quit to Title' });
+  return { kind: 'menu', items };
+}
+
+export function settingsPanel(settings) {
+  return { kind: 'panel', html: `<h2>Settings</h2><h3>Display</h3>` +
+    DISPLAYS.map(d => `<button class="choice${settings.display === d.id ? ' on' : ''}" data-tap="display:${d.id}">${esc(d.label)}<br><span class="note">${esc(d.note)}</span></button>`).join('') +
+    `<h3>Controls</h3><p class="note">Hold to choose: ${esc(holdWords())}.</p>` };
+}
+
+export function journalPanel(log) {
+  const lines = log.slice().reverse().slice(0, 120);
+  return { kind: 'panel', html: `<h2>Journal</h2>` + (lines.length ? lines.map(l => `<p>${esc(l)}</p>`).join('') : '<p class="note">Nothing written yet.</p>') };
+}
+
+export function mapPanel(world) {
+  const here = getEvent(world.eventId);
+  const known = Object.keys(EVENTS).filter(id => world.visited[id]).map(id => EVENTS[id].name);
+  const exits = exitsFor(world);
+  return { kind: 'panel', html: `<h2>Map</h2>
+    <p>You are at the <b>${esc(here.name)}</b>, facing ${esc(DIR_WORD[world.facing])}. Day ${world.day}, ${esc(world.timeOfDay)}.</p>
+    <h3>From here</h3>${['N', 'E', 'S', 'W'].map(d => `<p>${DIR_WORD[d]}: ${esc(exits[d].camp ? 'Camp' : exits[d].visited ? exits[d].name : '?')} – ${esc(exits[d].teaser)}</p>`).join('')}
+    <h3>Places you know</h3><p>${known.map(esc).join(' · ')}</p>
+    <p class="note">The full map comes in a later slice.</p>` };
+}
+
+export function helpPanel() {
+  return { kind: 'panel', html: `<h2>Help</h2>
+    <h3>Choosing</h3><p>Hold a button for ${esc(holdWords())}; a bar fills inside it. Let go early to cancel. On a computer, hold an arrow key or W A S D.</p>
+    <h3>In a fight</h3><p>Swipe left or right (or Q / E) for more actions. Swipe down (or Esc) to go back. Attack and Block ask where: Head, Left, Right, or Legs.</p>
+    <p>Enemies give nothing away unless something helps you read them (Pray may make you Focused). Learn their patterns.</p>
+    <h3>Luck</h3><p>When a ★ appears, tap it (or press L), then hold a choice for a lucky attempt.</p>
+    <h3>Corners</h3><p>Bottom left: your character. Bottom right: your inventory. Top left: the map. Top right: this menu.</p>` };
+}
