@@ -935,3 +935,39 @@ test('Shaken: a Clash you win hits with Disadvantage; Pray clears it', () => {
   ok(prayed.lines.some(l => l.includes('no longer Shaken')), prayed.lines.join(' | '));
   ok(p, 'ok');
 });
+
+// --- Events for the screen's effects ------------------------------------------------------------
+
+baseTest('Events: every exchange reports what happened where, matching the stamina that changed', () => {
+  const T4 = ['head', 'left', 'right', 'legs'];
+  const sumE = (cb) => Object.values(cb.enemy.stamina).reduce((a, b) => a + b, 0);
+  const seen = new Set();
+  for (const enemyId of ['werewolf', 'barrowKnight']) {
+    for (let seed = 1; seed <= 25; seed++) {
+      let c = practiceFighter(); let cb = C.startCombat(c, enemyId, { seed });
+      const rng = createRng(seed * 7);
+      for (let i = 0; i < 40 && !cb.outcome; i++) {
+        const before = { you: totalStamina(c), it: sumE(cb) };
+        const choice = rng.next() < 0.3 ? { action: 'block', target: T4[Math.floor(rng.next() * 4)] }
+                                        : { action: 'attack', target: T4[Math.floor(rng.next() * 4)] };
+        let r = C.submitAction(c, cb, choice);
+        let events = r.events;
+        ok(Array.isArray(events), 'events listed');
+        if (r.combat.pendingClash) {
+          ok(events.some(e => e.type === 'clash'), 'a Clash is reported');
+          r = C.submitClash(r.character, r.combat, T4[Math.floor(rng.next() * 4)]);
+          ok(r.events.some(e => e.type === 'clashResult'), 'and its result');
+          events = events.concat(r.events);
+        }
+        c = r.character; cb = r.combat;
+        for (const e of events) { seen.add(`${e.type}:${e.who || ''}`); if (e.target) ok(T4.includes(e.target), 'a zone'); }
+        const dealt = (who) => events.filter(e => e.type === 'hit' && e.who === who).reduce((n, e) => n + e.amount, 0);
+        eq(before.it - sumE(cb), dealt('player'), 'enemy stamina lost = your hits');
+        eq(before.you - totalStamina(c), dealt('enemy'), 'your stamina lost = its hits');
+        if (cb.outcome) ok(events.some(e => e.type === cb.outcome), 'the end is reported');
+      }
+    }
+  }
+  for (const k of ['hit:player', 'hit:enemy', 'miss:player', 'block:enemy', 'block:player', 'clash:', 'clashResult:', 'clank:'])
+    ok(seen.has(k), 'seen ' + k);
+});

@@ -38,12 +38,14 @@ function read(key) { try { return JSON.parse(localStorage.getItem(key)); } catch
 function write(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* private mode: play on */ } }
 const loadGame = () => { const s = read(GAME_KEY); return s && s.v === GAME_VERSION && s.screen !== 'end' ? s : null; };
 
-let settings = { display: 'text', ...(read(SETTINGS_KEY) || {}) };
+const prefersLess = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+let settings = { display: 'text', motion: prefersLess ? 'reduce' : 'full', ...(read(SETTINGS_KEY) || {}) };
+let fxCount = 0;                              // each exchange's effects play once (ui.fx.id)
 let g = null;                                 // the run (null on the title screen)
 let ui = freshUi();
 let holds = {};
 let view = null;
-function freshUi() { return { page: 0, pending: null, armed: false, overlay: null, dice: null, toast: null }; }
+function freshUi() { return { page: 0, pending: null, armed: false, overlay: null, dice: null, toast: null, fx: null, busy: false }; }
 function save() { if (g) write(GAME_KEY, g); }
 
 // ---- Helpers ----------------------------------------------------------------------------------
@@ -60,7 +62,7 @@ function arrive(a, fresh) {
 function startFight(enemyId) {
   const f = beginFight(g.character, g.world, enemyId);
   g.world = f.world; g.combat = f.combat; g.screen = 'combat'; g.lastEnemyArt = getEnemy(enemyId).art;
-  ui.page = 0; ui.pending = null; ui.armed = false;
+  ui.page = 0; ui.pending = null; ui.armed = false; ui.fx = null;
 }
 function finish(outcome) { g.screen = 'end'; g.runOver = outcome; g.combat = null; }
 
@@ -75,7 +77,10 @@ const act = {
     g = { v: GAME_VERSION, screen: 'creation', creation: { seed, step: 'race', races, occupations, name }, log: [], lines: [] };
     ui = freshUi();
   },
-  continueGame() { g = loadGame(); ui = freshUi(); },
+  continueGame() {
+    g = loadGame(); ui = freshUi();
+    if (g && g.screen === 'combat' && g.combat && g.combat.outcome) finishFight();   // closed mid-fall
+  },
   openSettings() { ui.overlay = 'settings'; },
   pick(field, value) {
     const cr = g.creation;
@@ -141,20 +146,29 @@ const act = {
     g.character = r.character; g.combat = r.combat;
     ui.pending = null; ui.armed = false; ui.page = 0;
     ui.dice = diceFrom(r.lines, g.character.luckyNumber);
+    ui.fx = { id: ++fxCount, events: r.events || [] };
     say(r.lines);
     afterExchange();
   },
   clash(dir) {
     const r = submitClash(g.character, g.combat, dir);
     g.character = r.character; g.combat = r.combat;
+    ui.fx = { id: ++fxCount, events: r.events || [] };
     addLines(r.lines);
     afterExchange();
   },
   toTitle() { if (g && g.screen === 'end') { try { localStorage.removeItem(GAME_KEY); } catch {} } g = null; ui = freshUi(); },
 };
 
+// A fight that just ended: in the Graphic displays the last blow (and the
+// enemy sinking away) plays for a moment before the fight closes.
 function afterExchange() {
   if (!g.combat.outcome) return;
+  if (settings.display === 'text') return finishFight();
+  ui.busy = true;
+  setTimeout(() => { ui.busy = false; ui.fx = null; finishFight(); save(); draw(); }, 750);
+}
+function finishFight() {
   const f = endFight(g.character, g.world, g.combat);
   g.character = f.character; g.world = f.world;
   const drops = ATTRS.filter(k => f.fatigue[k]).map(k => `−${f.fatigue[k]} ${k}`).join(', ') || 'none';
@@ -190,11 +204,12 @@ function currentView() {
 
 function draw() {
   view = currentView();
+  app.dataset.motion = settings.motion;
   holds = render(app, view, settings.display, { choose, tap, input });
 }
 
 function choose(dir) {
-  if (ui.overlay) return;
+  if (ui.overlay || ui.busy) return;
   const slot = view.diamond && view.diamond[dir];
   if (!slot || slot.enabled === false || !slot.run) return;
   ui.toast = null;
@@ -205,6 +220,7 @@ function choose(dir) {
 }
 
 function tap(id) {
+  if (ui.busy) return;
   const inRun = !!(g && g.character && g.screen !== 'end');
   if (id === 'close') ui.overlay = null;
   else if (id === 'menu') ui.overlay = ui.overlay === 'menu' ? null : 'menu';
@@ -214,6 +230,7 @@ function tap(id) {
   else if (id === 'save') { save(); ui.overlay = null; ui.toast = 'Game saved.'; setTimeout(() => { ui.toast = null; draw(); }, 1500); }
   else if (id === 'quit') { save(); g = null; ui = freshUi(); }
   else if (id.startsWith('display:')) { settings.display = id.split(':')[1]; write(SETTINGS_KEY, settings); }
+  else if (id.startsWith('motion:')) { settings.motion = id.split(':')[1]; write(SETTINGS_KEY, settings); }
   else if (id === 'star') toggleLucky();
   else if (id === 'faceTrial') { act.faceTrial(); save(); }
   draw();

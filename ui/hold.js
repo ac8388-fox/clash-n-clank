@@ -8,11 +8,13 @@ export { HOLD_MS };
 
 // Make a button commit after the hold time.
 // The button needs a child element with class "fill" for the progress bar.
-export function attachHold(button, onCommit, { duration = HOLD_MS } = {}) {
+// onProgress(f), if given, is told the fill (0 to 1) too, so another element
+// can fill along with it (the enemy's zone while a target button is held).
+export function attachHold(button, onCommit, { duration = HOLD_MS, onProgress = null } = {}) {
   let start = 0, raf = 0, active = false, startX = 0, startY = 0;
   const fill = button.querySelector('.fill');
 
-  const setFill = (f) => { if (fill) fill.style.transform = `scaleX(${f})`; };
+  const setFill = (f) => { if (fill) fill.style.transform = `scaleX(${f})`; if (onProgress) onProgress(f); };
   const stop = () => {
     active = false;
     cancelAnimationFrame(raf);

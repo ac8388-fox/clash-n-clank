@@ -23,6 +23,9 @@ export function menuOverlay(inRun) {
 export function settingsPanel(settings) {
   return { kind: 'panel', html: `<h2>Settings</h2><h3>Display</h3>` +
     DISPLAYS.map(d => `<button class="choice${settings.display === d.id ? ' on' : ''}" data-tap="display:${d.id}">${esc(d.label)}<br><span class="note">${esc(d.note)}</span></button>`).join('') +
+    `<h3>Motion</h3>` +
+    [['full', 'Full motion', 'Hits recoil, Clanks shake the scene.'], ['reduce', 'Reduce motion', 'No shakes or recoils; flashes and numbers stay.']]
+      .map(([id, label, note]) => `<button class="choice${(settings.motion || 'full') === id ? ' on' : ''}" data-tap="motion:${id}">${esc(label)}<br><span class="note">${esc(note)}</span></button>`).join('') +
     `<h3>Controls</h3><p class="note">Hold to choose: ${esc(holdWords())}.</p>` };
 }
 

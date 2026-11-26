@@ -353,6 +353,15 @@ Build the screens to match the mockups exactly; this lists the parts and behavio
 
 **Art:** reuse the mockup scenes (Gorge, Crypt, Crossroads, Werewolf, Barrow Knight) as 195 × 422 PNGs shown at 2×. The Village and Hills can reuse the Crossroads art until they have their own.
 
+**The enemy in Graphic fights.** Each enemy is drawn as two layers: the fight background without the enemy (`<art>-bg@2x.png`) and the enemy alone on a transparent background (`<art>-sprite@2x.png`). `data/enemyArt.js` gives where the sprite sits on the 390 × 844 screen and its four zones (head, left, right, legs, as fractions of the sprite; left and right are the screen's, matching the Left and Right buttons). The combined pictures (`werewolf@2x.png`, `barrow-knight@2x.png`) stay for screens outside the fight. The Text display is unchanged.
+
+- **The enemy is the target.** While choosing where (Attack, Block, an attacking ability, or a Clash), the four zones are outlined in sky blue. Holding a target button fills its zone as the hold bar fills, and the player can also press and hold a zone directly to choose it (its button fills along).
+- **Results land on the zones:** damage floats up in red from the zone hit, “MISS” where an attack missed, and a shield mark with a sky-blue flash where the enemy Blocked.
+- **Tells show on the art as well as in the text:** a reverse tell dims its zone and labels it “safe”; a narrowing tell dims the two zones it rules out (an exact tell, the three).
+- **The fight reacts:** a hit flashes the enemy white, then it recoils away from the zone hit. A Clank throws sparks where the weapons meet and shakes the scene. A Clash flashes the whole screen before the CLASH prompt; afterwards the winner's hit shows on the loser's zone. When the enemy hits the player, the screen edge on that side flashes red (top for head, left, right, bottom for legs) with the damage beside it; a player's Block flashes that edge sky blue with a shield. The sprite darkens as the enemy's stamina drops; an Enraged werewolf pulses red and shakes slightly; a defeated enemy sinks and fades out before the fight closes.
+- **Effect rules:** every effect lasts about half a second or less; the house style keeps to black, white, sky blue, and red (full color may use warmer sparks); no shadow on text. **Settings → Motion → Reduce motion** turns off shakes, recoils, and the sink (the defeated enemy just fades); flashes and numbers stay. It starts on when the device asks for reduced motion.
+- The fight engine reports each exchange's events (hit, miss, Block, Clank, Clash and its result, Enraged, victory, defeat; each with its zone) alongside the result lines; the effects only draw them and never change the rules.
+
 ## Build steps and how to check them
 
 Build in five steps, and make every step end in something that can be opened and tried on a phone, so it can be checked without reading code.
@@ -396,6 +405,7 @@ Slice 1 is done when a new player can finish the loop on a phone without help, a
 - [ ] Combat fatigue, Rest, and Sleep update stamina and traits correctly
 - [ ] Menu, character sheet, and inventory open from their buttons
 - [ ] The Display setting switches between Text and Graphic versions
+- [ ] In Graphic fights the enemy is its own layer: zones outlined while choosing where (hold a button or the zone itself), results and tells shown on the zones, the fight reacts (flash, recoil, sparks, Clash flash, red edge when you're hit, darkening, Enraged pulse, sinking on defeat), and Reduce motion turns off shakes and recoils
 - [ ] Autosave restores the run after the app is closed
 
 **Out of scope for Slice 1:** guild entry and other classes, specializations, occupation abilities and leveling, legacy, the map screen's contents, NPCs and affection, drinks and tolerance, racial abilities in combat, ranged combat and positions beyond Close and Approach, durability repair, and shops.

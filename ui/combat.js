@@ -8,7 +8,13 @@
 // The caption is always neutral; tells (clue chips, reverse style) appear only
 // when a tell source gives one. Result lines show hits, misses, Clanks,
 // Clashes, and Clash damage.
+//
+// Graphic displays draw the enemy as its own layer (data/enemyArt.js): the
+// four zones are the targets (outlined while choosing where; hold one to
+// choose it), tells dim the zones they rule out, and the last exchange's
+// events (ui.fx) play as short effects on the zones and the screen edges.
 import { getEnemy } from '../data/enemies.js';
+import { ENEMY_ART } from '../data/enemyArt.js';
 import { getAbility } from '../data/abilities.js';
 import { getWeapon } from '../data/items.js';
 import { TRAITS } from '../data/traits.js';
@@ -75,8 +81,25 @@ export function combatView(ctx) {
     corners: true,
   };
 
+  const ea = ENEMY_ART[cb.enemyId];
+  if (ea) {
+    const tell = clash ? clash.tell : cb.current.tell;
+    v.art = `${e.art}-bg`;
+    v.enemy = {
+      sprite: `${e.art}-sprite`, box: ea.box, zones: ea.zones,
+      health: sum(cb.enemy.stamina) / sum(cb.enemy.totals),
+      enraged: !!cb.enemy.enraged,
+      targeting: !!clash || !!(ui.pending && ['attack', 'block', 'ability'].includes(ui.pending.action)),
+      ruledOut: tell ? tell.ruledOut : [],
+      safe: tell && tell.level === 1 ? tell.ruledOut[0] : null,
+      fx: ui.fx || null,
+      falling: cb.outcome === 'victory',
+    };
+  }
+
   if (clash) {
     v.clash = { tells };
+    v.caption = null; v.speech = null; v.hint = null;
     v.top = [];
     v.bottom = [...results];
     v.diamond = {};

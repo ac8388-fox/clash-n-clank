@@ -179,6 +179,7 @@ button { font-family: inherit; color: var(--white); }
 .panel .choice { display: block; width: 100%; margin: 8px 0; padding: 8px 10px; font-size: 22px; text-align: left; background: var(--black);
   border: 2px solid var(--white); box-shadow: var(--shadow); cursor: pointer; }
 .panel .choice.on { background: var(--white); color: var(--black); }
+.panel .choice.on .note { color: var(--black); }
 .panel .map { display: block; width: 100%; height: auto; margin: 6px 0; }
 .map line, .map path { stroke: var(--white); stroke-width: 2; fill: none; }
 .map line.uncrossed { stroke-dasharray: 2 5; stroke: var(--grey); }
@@ -206,3 +207,111 @@ button { font-family: inherit; color: var(--white); }
 .narr .small { font-size: 18px; line-height: 1.2; }
 .narr.top:has(.small) { gap: 6px; }
 .narr .label { font-size: 18px; color: var(--grey); }
+
+/* ---- The enemy in Graphic fights (data/enemyArt.js) -------------------------------------------
+   Background and sprite are separate layers. Every effect is short (half a second or less).
+   House style keeps to black, white, sky blue, and red; full color may use warmer sparks.
+   "Reduce motion" (Settings) turns off shakes, recoils, and the sink; flashes and numbers stay. */
+#app { --spark1: var(--white); --spark2: var(--glow); }
+#app[data-display="full"] { --spark1: #FFE08A; --spark2: #FF9A3C; }
+.foe { position: absolute; z-index: 1; pointer-events: none; }
+.foe-shake, .foe-move { position: absolute; inset: 0; }
+.foe .sprite { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; filter: var(--base);
+  transition: filter .4s; }
+/* A hit: a quick white flash, then a recoil away from the zone hit. */
+.foe .sprite.flash { animation: hitflash .16s steps(1) var(--d) 1; }
+@keyframes hitflash { 0% { filter: brightness(0) invert(1); } 100% { filter: var(--base); } }
+.foe-move.recoil-up      { animation: recoil-up .32s ease-out calc(var(--d) + .08s) 1; }
+.foe-move.recoil-down    { animation: recoil-down .32s ease-out calc(var(--d) + .08s) 1; }
+.foe-move.recoil-toleft  { animation: recoil-toleft .32s ease-out calc(var(--d) + .08s) 1; }
+.foe-move.recoil-toright { animation: recoil-toright .32s ease-out calc(var(--d) + .08s) 1; }
+@keyframes recoil-up      { 30% { transform: translate(3px, -10px) rotate(1.5deg); } 100% { transform: none; } }
+@keyframes recoil-down    { 30% { transform: translate(0, 9px) scaleY(.97); } 100% { transform: none; } }
+@keyframes recoil-toleft  { 30% { transform: translate(-12px, -2px) rotate(-2deg); } 100% { transform: none; } }
+@keyframes recoil-toright { 30% { transform: translate(12px, -2px) rotate(2deg); } 100% { transform: none; } }
+/* Defeated: the enemy sinks and fades out. */
+.foe-move.falling { animation: sink .55s ease-in .15s forwards; }
+@keyframes sink { to { transform: translateY(60px); opacity: 0; } }
+@keyframes fadeaway { to { opacity: 0; } }
+/* Enraged: a red pulse and a slight shake while it lasts. */
+.foe-shake.enraged { animation: rageshake .18s linear infinite; }
+.foe-shake.enraged .sprite { animation: ragepulse .7s ease-in-out infinite alternate; }
+.foe-shake.enraged .sprite.flash { animation: hitflash .16s steps(1) var(--d) 1, ragepulse .7s ease-in-out .2s infinite alternate; }
+@keyframes ragepulse { from { filter: var(--base) drop-shadow(0 0 0 #E5383B); } to { filter: var(--base) drop-shadow(0 0 7px #E5383B) drop-shadow(0 0 2px #E5383B); } }
+@keyframes rageshake { 0%, 100% { transform: none; } 25% { transform: translate(1px, 0); } 75% { transform: translate(-1px, 1px); } }
+/* Clank: a short shake of the scene and the enemy. */
+.foe-shake.shake, .scene.shake { animation: shake .3s linear 1; }
+@keyframes shake { 20% { transform: translate(-5px, 2px); } 40% { transform: translate(5px, -2px); } 60% { transform: translate(-3px, 1px); } 80% { transform: translate(2px, 0); } }
+
+/* Zones: sky-blue outlines while choosing where; hold one to choose it. */
+.foe .zone { position: absolute; box-sizing: border-box; }
+.foe.targeting .zone { pointer-events: auto; cursor: pointer; border: 2px solid var(--glow); touch-action: none; }
+.foe .zone .fill { position: absolute; inset: 0; background: rgba(91, 200, 245, .45); transform: scaleX(0); transform-origin: left; }
+/* Tells: the zones it rules out are dimmed; a reverse tell marks its zone "safe". */
+.foe .zone.ruled { background: rgba(0, 0, 0, .55); }
+.foe.targeting .zone.ruled { border-style: dashed; }
+.foe .zone .safe { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--black);
+  color: var(--glow); border: 2px solid var(--glow); font-size: 16px; line-height: 1; padding: 3px 6px; text-transform: uppercase; }
+.foe .zone.blockflash { animation: blockflash .4s ease-out 1; }
+@keyframes blockflash { 0% { background: rgba(91, 200, 245, .75); } 100% { background: transparent; } }
+
+/* Marks on the enemy: damage (red), MISS, a shield where it Blocked, sparks on a Clank. */
+.foemarks { position: absolute; z-index: 4; pointer-events: none; }
+.foemarks .float, .foemarks .shieldmark, .foemarks .sparks { position: absolute; transform: translate(-50%, -50%); opacity: 0; z-index: 2; }
+.foemarks .float { font-size: 36px; line-height: 1; padding: 2px 8px; background: var(--black); border: 2px solid currentColor;
+  animation: floatup .6s ease-out both; }
+.foemarks .float.dmg { color: var(--red); }
+.foemarks .float.miss { color: var(--white); font-size: 26px; }
+@keyframes floatup { 0% { opacity: 0; transform: translate(-50%, -30%); } 15% { opacity: 1; } 75% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -150%); } }
+.foemarks .shieldmark { animation: pop .45s ease-out both; }
+@keyframes pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.6); } 25% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1); } }
+.foemarks .sparks { width: 0; height: 0; opacity: 1; }
+.foemarks .sparks::before { content: ''; position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; background: var(--spark1);
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); animation: burst .25s ease-out both; animation-delay: inherit; }
+.foemarks .sparks i { position: absolute; left: 0; top: -2px; width: 18px; height: 4px; background: var(--spark1); transform-origin: 0 50%;
+  animation: spark .4s ease-out both; animation-delay: inherit; }
+.foemarks .sparks i:nth-child(even) { background: var(--spark2); width: 12px; }
+@keyframes spark { 0% { transform: rotate(var(--a)) translateX(4px); opacity: 1; } 100% { transform: rotate(var(--a)) translateX(64px); opacity: 0; } }
+@keyframes burst { 0% { transform: scale(.4); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+
+/* When it hits you: the screen edge on that side flashes red, with the damage near it. */
+.edge { position: absolute; z-index: 5; pointer-events: none; opacity: 0; animation: edgeflash .5s ease-out both; }
+.edge.top { top: 0; left: 0; right: 0; height: 120px; background: linear-gradient(to bottom, rgba(229, 56, 59, .85), rgba(229, 56, 59, 0)); }
+.edge.bottom { bottom: 0; left: 0; right: 0; height: 120px; background: linear-gradient(to top, rgba(229, 56, 59, .85), rgba(229, 56, 59, 0)); }
+.edge.left { top: 0; bottom: 0; left: 0; width: 90px; background: linear-gradient(to right, rgba(229, 56, 59, .85), rgba(229, 56, 59, 0)); }
+.edge.right { top: 0; bottom: 0; right: 0; width: 90px; background: linear-gradient(to left, rgba(229, 56, 59, .85), rgba(229, 56, 59, 0)); }
+.edge.blocked.top { background: linear-gradient(to bottom, rgba(91, 200, 245, .8), rgba(91, 200, 245, 0)); }
+.edge.blocked.bottom { background: linear-gradient(to top, rgba(91, 200, 245, .8), rgba(91, 200, 245, 0)); }
+.edge.blocked.left { background: linear-gradient(to right, rgba(91, 200, 245, .8), rgba(91, 200, 245, 0)); }
+.edge.blocked.right { background: linear-gradient(to left, rgba(91, 200, 245, .8), rgba(91, 200, 245, 0)); }
+.edge.missed { background: none !important; }
+.edge .num { position: absolute; font-size: 34px; line-height: 1; padding: 2px 8px; background: var(--black); color: var(--red); border: 2px solid var(--red); }
+.edge.missed .num { color: var(--white); border-color: var(--white); font-size: 24px; }
+.edge.blocked .num { color: var(--glow); border-color: var(--glow); padding: 2px 4px; }
+.edge.top .num { top: 104px; left: calc(50% + 74px); }
+.edge.bottom .num { bottom: 140px; left: 50%; transform: translateX(-50%); }
+.edge.left .num { left: 24px; top: 320px; }
+.edge.right .num { right: 24px; top: 320px; }
+@keyframes edgeflash { 0% { opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Clash: a brief full-screen flash, then the prompt. */
+.flashscreen { position: absolute; inset: 0; z-index: 7; background: var(--white); pointer-events: none; animation: whiteout .3s ease-out both; }
+@keyframes whiteout { 0% { opacity: .95; } 100% { opacity: 0; } }
+.clashfresh .clash { animation: clashin .2s ease-out .12s both; }
+@keyframes clashin { from { opacity: 0; transform: scale(1.15); } to { opacity: 1; transform: none; } }
+[data-display="house"] .clash, [data-display="full"] .clash { pointer-events: none; }
+[data-display="house"] .clash, [data-display="full"] .clash { top: 214px; }
+[data-display="house"] .clash .big, [data-display="full"] .clash .big { display: inline-block; background: var(--black); padding: 4px 12px 0; border: 2px solid var(--white); }
+[data-display="house"] .clash .sub, [data-display="full"] .clash .sub { display: inline-block; background: var(--black); padding: 2px 8px; color: var(--white); }
+
+/* Overlays over the enemy let presses through to its zones. */
+.caption, .speech, .hintline, .results, .chips, .clash { pointer-events: none; }
+
+/* Reduce motion: no shakes, recoils, or sinking; flashes and numbers stay. */
+#app[data-motion="reduce"] .foe-shake, #app[data-motion="reduce"] .foe-move, #app[data-motion="reduce"] .scene.shake { animation: none !important; }
+#app[data-motion="reduce"] .foe-move.falling { animation: fadeaway .55s ease-in .15s forwards !important; }
+#app[data-motion="reduce"] .foemarks .float { animation-name: fadeinout; }
+#app[data-motion="reduce"] .clashfresh .clash { animation: none; }
+@keyframes fadeinout { 0% { opacity: 0; transform: translate(-50%, -50%); } 15%, 75% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -50%); } }

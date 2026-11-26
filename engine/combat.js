@@ -589,7 +589,12 @@ export function submitAction(characterIn, combatIn, choice) {
 
   P.history.push({ action: action === 'ability' ? 'ability:' + ability.id : action, target: targeted ? choice.target : null });
 
-  const ctx = { c, cb, enemy, step, mv, ability, lines, rng, lucky };
+  // events: what happened where, for the screen's effects (no effect on the rules):
+  //   { type: 'hit' | 'miss' | 'block', who: 'player' | 'enemy' (who acted), target, amount }
+  //   { type: 'clank', target } · { type: 'clash' } · { type: 'clashResult', won }
+  //   { type: 'enrage' } · { type: 'victory' } · { type: 'defeat' }
+  const events = [];
+  const ctx = { c, cb, enemy, step, mv, ability, lines, rng, lucky, events };
 
   // --- 5. Attacks meet (equal speed, or one step apart) -----------------------
   if (isAttack && mv.action === 'attack') {
@@ -599,6 +604,7 @@ export function submitAction(characterIn, combatIn, choice) {
     });
     if (meet === 'clank') {
       lines.push(`Clank! Your ${weapon.name.toLowerCase()} meets its ${mv.weapon}. You are both Off-Balance.`);
+      events.push({ type: 'clank', target: choice.target });
       c.durability = wearItem(c.durability, c.gear.ready[P.weaponIndex]);
       playerGainsTNT(c, cb, 'offBalance', lines);
       addCondition(E, 'offBalance', k);
@@ -632,7 +638,8 @@ export function submitAction(characterIn, combatIn, choice) {
       };
       cb.rngState = rng.getState();
       cb.log.push(...lines);
-      return { character: c, combat: cb, lines };
+      events.push({ type: 'clash' });
+      return { character: c, combat: cb, lines, events };
     }
   }
 
@@ -657,6 +664,7 @@ export function submitAction(characterIn, combatIn, choice) {
       if (a.side === 'enemy' && !enemyDown && mv.action === 'enrage') {
         E.enraged = true;
         lines.push('It howls at the moon. It is Enraged!');
+        events.push({ type: 'enrage' });
       } else if (a.side === 'enemy' && !enemyDown) {
         const staggered = resolveEnemy(ctx, { weaponId: mv.weapon, target: mv.target, enemyAttackMod,
                                               playerBlocking: action === 'block' ? choice.target : null, playerBlockMod });
@@ -700,6 +708,7 @@ function resolvePlayer(ctx, o) {
       const br = blockResult(dmg, o.enemyBlockMod);
       dmg = br.taken;
       blocked = true;
+      ctx.events.push({ type: 'block', who: 'enemy', target: o.target });
       if (dmg === 0) lines.push(`It blocks ${what}.`);
     }
     if (dmg > 0 && !blocked && !o.clashWin) {
@@ -708,6 +717,7 @@ function resolvePlayer(ctx, o) {
       if (miss) {
         cb.stats.playerMisses += 1;
         lines.push(miss);
+        ctx.events.push({ type: 'miss', who: 'player', target: o.target });
         dmg = 0;
       }
     }
@@ -716,6 +726,7 @@ function resolvePlayer(ctx, o) {
       E.stamina = r.stamina;
       const landed = r.applied.reduce((n, a) => n + a.amount, 0);
       E.lastHit = { damage: ((E.lastHit && E.lastHit.damage) || 0) + landed, target: o.target };
+      ctx.events.push({ type: 'hit', who: 'player', target: o.target, amount: landed });
       const verb = PLAYER_VERB[o.weapon.id] || 'hits';
       const subject = o.ability ? `${o.ability.name}: your ${o.weapon.name.toLowerCase()}` : `Your ${o.weapon.name.toLowerCase()}`;
       lines.push(`${subject} ${verb} ${ENEMY_PART[o.target]}. ${damageText(r.applied)}`);
@@ -832,6 +843,7 @@ function resolveEnemy(ctx, o) {
     E.wasBlocked = true;
     const wid = ctx.c.gear.ready[cb.player.weaponIndex];
     if (wid) ctx.c.durability = wearItem(ctx.c.durability, wid);
+    ctx.events.push({ type: 'block', who: 'player', target: o.target });
     if (br.taken === 0) {
       lines.push(`You block its ${weapon.name.toLowerCase()} at ${YOUR_PART[o.target]}.`);
       return false;
@@ -845,6 +857,7 @@ function resolveEnemy(ctx, o) {
   if (miss) {
     cb.stats.enemyMisses += 1;
     lines.push(miss);
+    ctx.events.push({ type: 'miss', who: 'enemy', target: o.target });
     return false;
   }
 
@@ -857,6 +870,7 @@ function resolveEnemy(ctx, o) {
   const armorId = ctx.c.gear.armor[SLOT_FOR[o.target]];
   if (armorId) ctx.c.durability = wearItem(ctx.c.durability, armorId);
   lines.push(`Its ${weapon.name.toLowerCase()} ${verb} ${YOUR_PART[o.target]}. ${damageText(r.applied)}`);
+  ctx.events.push({ type: 'hit', who: 'enemy', target: o.target, amount: r.applied.reduce((n, a) => n + a.amount, 0) });
   return (weapon.traits || []).includes('stagger');
 }
 
@@ -874,7 +888,7 @@ export function submitClash(characterIn, combatIn, direction) {
   const lines = [];
   const ctx = { c, cb, enemy, step: stepFor(cb), mv: moveFor(cb),
                 ability: pc.abilityId ? getAbility(pc.abilityId) : null,
-                lines, rng: createRng(cb.rngState), lucky: pc.lucky };
+                lines, rng: createRng(cb.rngState), lucky: pc.lucky, events: [] };
   cb.pendingClash = null;
 
   // The winner's attack lands with its normal damage and can't miss (they
@@ -882,6 +896,7 @@ export function submitClash(characterIn, combatIn, direction) {
   // Advantage on their next attack and the loser becomes Off-Balance.
   if (direction === pc.enemyDir) {
     cb.stats.clashWins += 1;
+    ctx.events.push({ type: 'clashResult', won: true });
     lines.push('You read it and win the Clash!');
     const weapon = currentWeapon(ctx.c, cb.player);
     // Shaken: Disadvantage in Clashes (the winning hit is weaker).
@@ -896,6 +911,7 @@ export function submitClash(characterIn, combatIn, direction) {
     lines.push('Advantage on your next attack; it is Off-Balance.');
   } else {
     cb.stats.clashLosses += 1;
+    ctx.events.push({ type: 'clashResult', won: false });
     lines.push(`It wins the Clash (it went ${pc.enemyDir}).`);
     resolveEnemy(ctx, {
       weaponId: pc.enemyWeapon, target: pc.enemyTarget, enemyAttackMod: pc.enemyAttackMod,
@@ -941,15 +957,17 @@ function cleanup(ctx) {
   if (isDefeated(E.stamina)) {
     cb.outcome = 'victory';
     lines.push(`The ${enemy.name.toLowerCase()} falls.`);
+    ctx.events.push({ type: 'victory' });
   } else if (isDefeated(staminaOf(c))) {
     cb.outcome = 'defeat';
     lines.push('You collapse. Your strength is spent.');
+    ctx.events.push({ type: 'defeat' });
   }
 
   cb.rngState = rng.getState();
   cb.log.push(...lines);
   const next = cb.outcome ? cb : beginExchange(c, cb);
-  return { character: c, combat: next, lines };
+  return { character: c, combat: next, lines, events: ctx.events };
 }
 
 // ---------------------------------------------------------------------------
