@@ -2,6 +2,7 @@
 import { runAll } from './harness.js';
 import './rules.test.js';
 import './combat.test.js';
+import './world.test.js';
 import './ui.test.js';
 
 const results = await runAll();

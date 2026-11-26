@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>World Test – Clash n' Clank</title>
+<style>
+  @font-face { font-family: 'VT323'; src: url('assets/fonts/VT323-Regular.ttf') format('truetype'); font-display: swap; }
+  :root { --black: #000; --white: #fff; --blue: #5BC8F5; --red: #E5383B; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--black); color: var(--white); }
+  body {
+    font-family: 'VT323', ui-monospace, Menlo, Consolas, monospace; font-size: 21px; line-height: 1.15;
+    padding: max(12px, env(safe-area-inset-top)) 14px max(20px, env(safe-area-inset-bottom));
+    max-width: 430px; margin: 0 auto;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  h1 { font-size: 26px; font-weight: normal; margin: 0; }
+  .bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .grow { flex: 1; }
+  button, select {
+    font: inherit; color: var(--white); background: var(--black);
+    border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue); padding: 4px 10px;
+  }
+  .small { font-size: 17px; opacity: .85; }
+  #where { font-size: 22px; }
+  #where .place { font-size: 28px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  th, td { text-align: center; padding: 1px 2px; font-weight: normal; }
+  th { opacity: .8; font-size: 17px; }
+  td.who { text-align: left; width: 28%; }
+  .foe { color: var(--red); }
+  .low { color: var(--red); }
+  #scene { border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue); padding: 8px; margin: 8px 0; min-height: 3em; }
+  #enemyline { display: flex; align-items: baseline; gap: 8px; }
+  #enemyline .name { color: var(--red); font-size: 26px; }
+  #star { margin-left: auto; font-size: 24px; padding: 0 10px; color: var(--blue); display: none; animation: glow 1s ease-in-out infinite alternate; }
+  #star.show { display: inline-block; }
+  #star.armed { background: var(--blue); color: var(--black); animation: none; }
+  @keyframes glow { from { box-shadow: 3px 3px 0 var(--blue); } to { box-shadow: 0 0 12px var(--blue); } }
+  #hint { color: var(--blue); font-size: 18px; }
+  #chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip { border: 1px solid var(--white); box-shadow: 2px 2px 0 var(--blue); padding: 1px 8px; font-size: 19px; }
+  #status { font-size: 17px; opacity: .9; }
+  #status .cond { color: var(--red); }
+  #status .tpt { color: var(--blue); }
+  .diamond { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 10px 0 4px; touch-action: pan-y; }
+  .opt { position: relative; overflow: hidden; min-height: 60px; padding: 5px 3px;
+         display: flex; flex-direction: column; align-items: center; justify-content: center;
+         -webkit-tap-highlight-color: transparent; touch-action: none; }
+  .opt .lbl { position: relative; z-index: 1; text-align: center; }
+  .opt .sub { position: relative; z-index: 1; font-size: 15px; opacity: .8; text-align: center; }
+  .opt .fill { position: absolute; left: 0; bottom: 0; height: 100%; width: 100%; background: var(--blue); opacity: .45; transform: scaleX(0); transform-origin: left center; }
+  .opt:disabled { opacity: .35; box-shadow: none; }
+  .opt.up { grid-column: 2; grid-row: 1; } .opt.left { grid-column: 1; grid-row: 2; }
+  .opt.right { grid-column: 3; grid-row: 2; } .opt.down { grid-column: 2; grid-row: 3; }
+  .center { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 17px; }
+  .pager { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
+  .pager button { padding: 2px 10px; }
+  .pager button[hidden] { display: none; }
+  #result { border: 2px solid var(--white); box-shadow: 3px 3px 0 var(--blue); padding: 8px; min-height: 2.2em; margin: 8px 0; }
+  #end { display: none; border: 2px solid var(--red); padding: 10px; margin: 8px 0; }
+  #end.show { display: block; }
+  #log { font-size: 16px; opacity: .75; max-height: 240px; overflow-y: auto; -webkit-user-select: text; user-select: text; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <h1 class="grow">World Test</h1>
+    <button id="restart" type="button">Restart</button>
+  </div>
+  <div class="bar small">
+    Human Fighter. Ability:
+    <select id="ability"><option value="planB">Plan B</option><option value="crusher">Crusher</option></select>
+    <span>(on Restart)</span>
+  </div>
+
+  <div id="where"></div>
+  <table>
+    <thead><tr><th></th><th>STR</th><th>AGI</th><th>WIS</th><th>FAI</th></tr></thead>
+    <tbody>
+      <tr id="row-you"><td class="who">You</td><td></td><td></td><td></td><td></td></tr>
+      <tr id="row-foe"><td class="who foe" id="foe-name"></td><td></td><td></td><td></td><td></td></tr>
+    </tbody>
+  </table>
+  <div id="status"></div>
+
+  <div id="scene">
+    <div id="enemyline"><span class="name" id="ename"></span><span id="erange" class="small"></span>
+      <button id="star" type="button" aria-label="Fortune opening">★</button></div>
+    <div id="hint"></div>
+    <div id="text"></div>
+    <div id="chips"></div>
+  </div>
+
+  <div class="diamond" id="diamond">
+    <button class="opt up" type="button" data-dir="up"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+    <button class="opt left" type="button" data-dir="left"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+    <div class="center" id="mode"></div>
+    <button class="opt right" type="button" data-dir="right"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+    <button class="opt down" type="button" data-dir="down"><span class="fill"></span><span class="lbl"></span><span class="sub"></span></button>
+  </div>
+  <div class="pager">
+    <button id="prev" type="button">◀ Page</button>
+    <button id="back" type="button">Back</button>
+    <button id="totrial" type="button">Take the trial</button>
+    <button id="next" type="button">Page ▶</button>
+  </div>
+
+  <div id="result"></div>
+  <div id="end"></div>
+  <p class="small" id="help">Hold a button for half a second to choose. In a fight, swipe left or right for more actions; swipe down to go back. When a ★ appears, tap it, then hold a choice for a lucky attempt.</p>
+  <div id="log"></div>
+
+<script type="module">
+  import { newRun, exitsFor, arrival, go, campRest, campSleep, canSleep, beginFight, endFight, enemyName } from './engine/world.js';
+  import { trialOptions, attemptTrial, beginTrial } from './engine/trial.js';
+  import { submitAction, submitClash, availableActions, readingLabel } from './engine/combat.js';
+  import { attrTotal, ATTRS, luckOf } from './engine/rules.js';
+  import { getEvent, getTrial, DIR_FOR_BUTTON } from './data/events.js';
+  import { getEnemy } from './data/enemies.js';
+  import { getAbility } from './data/abilities.js';
+  import { getWeapon } from './data/items.js';
+  import { TRAITS } from './data/traits.js';
+  import { newSeed } from './engine/random.js';
+  import { attachHold, attachKeyboard, attachSwipes } from './ui/hold.js';
+  import { holdWords } from './ui/settings.js';
+
+  const SAVE = 'clash-n-clank.worldtest';
+  const SAVE_VERSION = 1;
+  const DIRS = ['up', 'right', 'down', 'left'];
+  const TARGET_OF = { up: 'head', left: 'left', right: 'right', down: 'legs' };
+  const TARGET_NAME = { head: 'Head', left: 'Left', right: 'Right', legs: 'Legs' };
+  const $ = (id) => document.getElementById(id);
+
+  let g;                                    // the saved game
+  let ui = { page: 0, pending: null, armed: false };
+
+  // ---- Flow -------------------------------------------------------------------------
+  function newGame() {
+    const run = newRun({ name: 'Wanderer', raceId: 'human', luckyNumber: 2, occupationId: 'knight', classAbility: $('ability').value }, newSeed());
+    g = { v: SAVE_VERSION, character: run.character, world: run.world, screen: 'travel', combat: null,
+          text: getEvent('crossroads').text, lines: [], log: ['You set out from the Crossroads.'], runOver: null };
+    ui = { page: 0, pending: null, armed: false };
+    save(); render();
+  }
+  function save() { try { localStorage.setItem(SAVE, JSON.stringify(g)); } catch {} }
+  function load() {
+    try { const s = JSON.parse(localStorage.getItem(SAVE)); if (s && s.v === SAVE_VERSION && s.world && s.character) return s; } catch {}
+    return null;
+  }
+  function say(lines) { g.lines = lines; g.log.push(...lines); if (g.log.length > 200) g.log = g.log.slice(-200); }
+
+  function travelTo(dir) {
+    const r = go(g.world, g.character, dir);
+    g.world = r.world;
+    if (r.camp) { g.screen = 'camp'; say([`You make camp. (${exitsFor(g.world)[dir].teaser}.)`]); return; }
+    const ev = getEvent(g.world.eventId);
+    say([`You travel ${{ N: 'north', E: 'east', S: 'south', W: 'west' }[dir]} to the ${ev.name}. It is now ${g.world.timeOfDay}.`]);
+    arrive(r.arrival);
+  }
+  function arrive(a) {
+    g.text = a.text;
+    if (a.screen === 'trial') { g.screen = 'trial'; if (!g.world.trial) g.world = beginTrial(g.character, g.world, a.trialId); }
+    else if (a.screen === 'combat') startFight(a.enemyId);
+    else g.screen = 'travel';
+  }
+  function startFight(enemyId) {
+    const f = beginFight(g.character, g.world, enemyId);
+    g.world = f.world; g.combat = f.combat; g.screen = 'combat';
+    ui = { page: 0, pending: null, armed: false };
+    const line = `${enemyName(enemyId)}: “${getEnemy(enemyId).line}”`;
+    g.lines = [...g.lines, line]; g.log.push(line);       // keep what led to the fight on screen
+  }
+  function tryTrial(dir) {
+    const lucky = ui.armed && g.world.trial && g.world.trial.fortune.open;
+    const r = attemptTrial(g.character, g.world, { dir, lucky });
+    g.character = r.character; g.world = r.world; ui.armed = false;
+    say(r.lines);
+    if (r.outcome === 'defeat') return finish('defeat');
+    if (r.outcome === 'success') {
+      if (r.next === 'combat') { g.text = getEvent(g.world.eventId).doneText; startFight(getEvent(g.world.eventId).enemy); }
+      else { g.screen = 'travel'; g.text = getEvent(g.world.eventId).doneText || g.text; }
+    }
+  }
+  function doCamp(which) {
+    if (which === 'rest') {
+      const r = campRest(g.character, g.world);
+      g.character = r.character; g.world = r.world;
+      say([`You rest. Your strength comes back a little. It is now ${g.world.timeOfDay}.`]);
+    } else if (which === 'sleep') {
+      const r = campSleep(g.character, g.world);
+      if (!r.ok) { say([r.reason]); return; }
+      g.character = r.character; g.world = r.world;
+      say([`You sleep through the night and wake in the Morning, fully rested. Day ${g.world.day}.`]);
+    }
+    leaveCamp();
+  }
+  function leaveCamp() {
+    const a = arrival(g.world);
+    // Coming back from camp at an unfinished trial or a fight: face it again.
+    arrive(a);
+  }
+  function fightAction(choice) {
+    const lucky = ui.armed && g.combat.current.fortune.open && choice.action !== 'block';
+    let r;
+    try { r = submitAction(g.character, g.combat, { ...choice, lucky }); }
+    catch (e) { say([e.message]); ui.pending = null; return; }
+    g.character = r.character; g.combat = r.combat; ui.pending = null; ui.armed = false; ui.page = 0;
+    say(r.lines);
+    afterExchange();
+  }
+  function fightClash(dir) {
+    const r = submitClash(g.character, g.combat, dir);
+    g.character = r.character; g.combat = r.combat;
+    g.lines = [...g.lines, ...r.lines]; g.log.push(...r.lines);
+    afterExchange();
+  }
+  function afterExchange() {
+    if (!g.combat.outcome) return;
+    const f = endFight(g.character, g.world, g.combat);
+    g.character = f.character; g.world = f.world;
+    const drops = ATTRS.filter(k => f.fatigue[k]).map(k => `−${f.fatigue[k]} ${k}`).join(', ') || 'none';
+    say([g.combat.outcome === 'victory' ? `Victory! Combat fatigue: ${drops}.` : 'You are defeated.']);
+    g.combat = null;
+    if (f.runOver) return finish(f.runOver);
+    g.screen = 'travel';
+    g.text = arrival(g.world).text;
+  }
+  function finish(outcome) { g.screen = 'end'; g.runOver = outcome; g.combat = null; }
+
+  // ---- What each diamond button means ------------------------------------------------------
+  function slots() {
+    const c = g.character;
+    if (g.screen === 'travel') {
+      const x = exitsFor(g.world);
+      const s = {};
+      for (const d of DIRS) {
+        const e = x[DIR_FOR_BUTTON[d]];
+        const compass = { N: 'North', E: 'East', S: 'South', W: 'West' }[DIR_FOR_BUTTON[d]];
+        s[d] = { label: e.camp ? `${compass}: Camp` : e.visited ? `${compass}: ${e.name}` : compass, sub: e.teaser, enabled: true, run: () => travelTo(DIR_FOR_BUTTON[d]) };
+      }
+      return s;
+    }
+    if (g.screen === 'trial') {
+      const s = {};
+      for (const o of trialOptions(c, g.world.trial.id)) {
+        s[o.dir] = {
+          label: o.label,
+          sub: o.racial ? `racial ability: sure (replaces ${o.replaces})` : `${o.attr} ${c.attrs[o.attr].stamina} / needs ${o.requirement}`,
+          enabled: true, run: () => tryTrial(o.dir),
+        };
+      }
+      return s;
+    }
+    if (g.screen === 'camp') {
+      const sleepOk = canSleep(g.world);
+      return {
+        up: { label: 'Rest', sub: '+half of each bar; time passes', enabled: true, run: () => doCamp('rest') },
+        down: { label: 'Sleep', sub: sleepOk ? 'full bars; wake at Morning' : 'Evening or Night only', enabled: sleepOk, run: () => doCamp('sleep') },
+        left: { label: 'Leave', sub: 'break camp', enabled: true, run: () => leaveCamp() },
+      };
+    }
+    if (g.screen === 'combat') {
+      const cb = g.combat;
+      if (cb.pendingClash) {
+        const s = {};
+        for (const d of DIRS) s[d] = { label: TARGET_NAME[TARGET_OF[d]], enabled: true, run: () => fightClash(TARGET_OF[d]) };
+        return s;
+      }
+      if (ui.pending) {
+        const s = {};
+        for (const d of DIRS) s[d] = { label: TARGET_NAME[TARGET_OF[d]], enabled: true, run: () => fightAction({ ...ui.pending, target: TARGET_OF[d] }) };
+        return s;
+      }
+      const acts = availableActions(c, cb);
+      if (ui.page === 0) {
+        const [pray, attack, block, item] = acts.page1;
+        return {
+          up: { label: 'Pray', sub: 'FAI', enabled: pray.enabled, run: () => fightAction({ action: 'pray' }) },
+          right: { label: 'Attack', sub: acts.weapon || '', enabled: attack.enabled, run: () => { ui.pending = { action: 'attack' }; } },
+          down: { label: 'Block', sub: 'WIS', enabled: block.enabled, run: () => { ui.pending = { action: 'block' }; } },
+          left: { label: 'Item', sub: item.detail, enabled: item.enabled, run: () => fightAction({ action: 'item' }) },
+        };
+      }
+      const s = {};
+      acts.abilities.slice((ui.page - 1) * 4, ui.page * 4).forEach((a, i) => {
+        s[DIRS[i]] = { label: a.name, sub: a.cooldownLeft ? `ready in ${a.cooldownLeft}` : a.speed, enabled: a.enabled,
+                       run: () => { ui.pending = { action: 'ability', abilityId: a.id }; } };
+      });
+      return s;
+    }
+    return {};
+  }
+  const pageCount = () => 1 + Math.ceil(g.character.abilities.filter(id => !getAbility(id).passive).length / 4);
+
+  function back() {
+    if (g.screen === 'combat' && ui.pending) { ui.pending = null; render(); return; }
+    if (g.screen === 'trial') { g.screen = 'travel'; say(['You step back from the trial.']); save(); render(); }
+  }
+  function turnPage(d) {
+    if (g.screen !== 'combat' || ui.pending || g.combat.pendingClash) return;
+    ui.page = (ui.page + d + pageCount()) % pageCount(); render();
+  }
+  function toggleLucky() {
+    const open = g.screen === 'combat' ? g.combat.current.fortune.open : g.screen === 'trial' ? g.world.trial.fortune.open : false;
+    if (open) { ui.armed = !ui.armed; render(); }
+  }
+
+  // ---- Drawing ------------------------------------------------------------------------------
+  function render() {
+    const c = g.character, w = g.world;
+    const ev = getEvent(w.eventId);
+    $('where').innerHTML = `<span class="place">${ev.name}</span> · Day ${w.day} · ${w.timeOfDay} · facing ${w.facing}`;
+
+    const you = $('row-you').children;
+    ATTRS.forEach((k, i) => {
+      const s = c.attrs[k].stamina, t = attrTotal(c, k);
+      you[i + 1].textContent = `${s}/${t}`; you[i + 1].className = s <= Math.ceil(t / 4) ? 'low' : '';
+    });
+    const foeRow = $('row-foe');
+    if (g.combat) {
+      foeRow.style.display = '';
+      $('foe-name').textContent = enemyName(g.combat.enemyId);
+      ATTRS.forEach((k, i) => { foeRow.children[i + 1].textContent = `${g.combat.enemy.stamina[k]}/${g.combat.enemy.totals[k]}`; foeRow.children[i + 1].className = 'foe'; });
+    } else foeRow.style.display = 'none';
+
+    const bits = [`Luck ${luckOf(c)}`];
+    if (c.racialReady) bits.push('racial ability ready');
+    if (g.combat) {
+      const wid = c.gear.ready[g.combat.player.weaponIndex];
+      if (wid) bits.push(`In hand: ${getWeapon(wid).name}`);
+      bits.push(`Reading the ${enemyName(g.combat.enemyId).toLowerCase()}: ${readingLabel(c, g.combat).label}`);
+      for (const x of g.combat.player.conditions) bits.push(`<span class="cond">${TRAITS[x.id].name}</span>`);
+      if (g.combat.player.advantageNext) bits.push('<span class="tpt">Advantage next attack</span>');
+      if (g.combat.enemy.enraged) bits.push('<span class="cond">Enraged</span>');
+    }
+    for (const t of c.traits.filter(t => t.kind === 'TPT')) bits.push(`<span class="tpt">${TRAITS[t.id].name}${t.left ? ` (${t.left})` : ''}</span>`);
+    bits.push(`Draughts ×${(c.pack.find(p => p.itemId === 'herbalDraught') || { qty: 0 }).qty}`);
+    $('status').innerHTML = bits.join(' · ');
+
+    // Scene
+    let fortune = null;
+    if (g.screen === 'combat') {
+      const cb = g.combat, e = getEnemy(cb.enemyId);
+      $('ename').textContent = e.name.toUpperCase(); $('erange').textContent = `· ${e.range}`;
+      fortune = cb.current.fortune;
+      $('text').textContent = cb.pendingClash ? `CLASH! ${cb.pendingClash.caption}` : `“${cb.current.caption}”`;
+      const tells = cb.pendingClash ? cb.pendingClash.tells : cb.current.tells;
+      $('chips').innerHTML = tells.map(t => `<span class="chip">${t}</span>`).join('');
+    } else {
+      $('ename').textContent = g.screen === 'trial' ? getTrial(w.trial.id).name.toUpperCase() : '';
+      $('erange').textContent = '';
+      if (g.screen === 'trial') fortune = w.trial.fortune;
+      $('text').textContent = g.screen === 'trial' ? `${g.text} ${getTrial(w.trial.id).prompt}`
+        : g.screen === 'camp' ? `You make camp${ev.safeSleep ? ' somewhere safe' : ''}. Rest or Sleep?`
+        : g.screen === 'end' ? '' : g.text;
+      $('chips').innerHTML = '';
+    }
+    const open = fortune && fortune.open && g.screen !== 'end';
+    $('star').classList.toggle('show', !!open);
+    $('star').classList.toggle('armed', !!open && ui.armed);
+    $('hint').textContent = open ? `${fortune.hint} ${ui.armed ? 'Lucky attempt armed: hold a choice.' : 'Tap ★ for a lucky attempt.'}` : '';
+
+    // Diamond
+    const s = slots();
+    for (const b of document.querySelectorAll('.opt')) {
+      const slot = s[b.dataset.dir];
+      b.querySelector('.lbl').textContent = slot ? slot.label : '';
+      b.querySelector('.sub').textContent = slot && slot.sub ? slot.sub : '';
+      b.disabled = !slot || !slot.enabled;
+    }
+    let mode = { travel: 'Travel', trial: 'Trial', camp: 'Camp', end: '' }[g.screen] ?? '';
+    if (g.screen === 'combat') mode = g.combat.pendingClash ? 'CLASH: pick a direction' : ui.pending ? 'Where?' : `Page ${ui.page + 1}/${pageCount()}`;
+    if (ui.armed) mode += ' ★';
+    $('mode').textContent = mode;
+    $('back').hidden = !(g.screen === 'trial' || (g.screen === 'combat' && ui.pending));
+    $('back').textContent = g.screen === 'trial' ? 'Leave the trial' : 'Back';
+    $('totrial').hidden = !(g.screen === 'travel' && arrival(w).screen === 'trial');
+    $('prev').hidden = $('next').hidden = !(g.screen === 'combat' && pageCount() > 1);
+
+    $('result').innerHTML = g.lines.map(l => `<div>${l}</div>`).join('') || '<div class="small">Hold a direction to travel.</div>';
+    if (g.screen === 'end') {
+      $('end').innerHTML = g.runOver === 'victory'
+        ? `<div style="font-size:28px">VICTORY</div><div>Both the werewolf and the Barrow Knight are defeated. Day ${w.day}, ${w.timeOfDay}. Tap Restart to play again.</div>`
+        : `<div style="font-size:28px">DEFEAT</div><div>Your strength is spent. Tap Restart to try again.</div>`;
+      $('end').classList.add('show');
+    } else $('end').classList.remove('show');
+    $('log').innerHTML = g.log.slice().reverse().slice(0, 80).map(l => `<div>${l}</div>`).join('');
+  }
+
+  // ---- Wire up -------------------------------------------------------------------------------
+  const holds = {};
+  for (const b of document.querySelectorAll('.opt')) {
+    holds[b.dataset.dir] = attachHold(b, () => {
+      const slot = slots()[b.dataset.dir];
+      if (slot && slot.enabled) { slot.run(); save(); render(); }
+    });
+  }
+  attachKeyboard({ getHold: (d) => holds[d], onPage: turnPage, onBack: back, onLucky: toggleLucky });
+  attachSwipes($('diamond'), { onPage: turnPage, onBack: back });
+  $('prev').addEventListener('click', () => turnPage(-1));
+  $('next').addEventListener('click', () => turnPage(1));
+  $('back').addEventListener('click', back);
+  $('totrial').addEventListener('click', () => { arrive(arrival(g.world)); save(); render(); });
+  $('star').addEventListener('click', toggleLucky);
+  $('restart').addEventListener('click', newGame);
+  $('help').textContent = $('help').textContent.replace('half a second', holdWords());
+
+  const saved = load();
+  if (saved) { g = saved; render(); } else newGame();
+</script>
+</body>
+</html>
