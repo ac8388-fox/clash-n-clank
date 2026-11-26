@@ -32,10 +32,21 @@ export function gearBonus(character, attr) {
   return bonus;
 }
 
-// Total = Natural + Class + Gear.
+// Penalties to an attribute's total from traits such as Injured (a CNT that
+// records which attribute it weakens).
+export function traitPenalty(character, attr) {
+  let p = 0;
+  for (const t of character.traits || []) {
+    const def = TRAITS[t.id];
+    if (def && def.totalPenalty && t.attr === attr) p += def.totalPenalty;
+  }
+  return p;
+}
+
+// Total = Natural + Class + Gear − trait penalties (never below 0).
 export function attrTotal(character, attr) {
   const a = character.attrs[attr];
-  return a.natural + a.class + gearBonus(character, attr);
+  return Math.max(0, a.natural + a.class + gearBonus(character, attr) - traitPenalty(character, attr));
 }
 
 export function attrTotals(character) {
@@ -360,9 +371,16 @@ export function trialCheck(stamina, requirement) {
   return stamina >= requirement;
 }
 
-// Failure damage = requirement − stamina, minimum 2.
-export function trialFailureDamage(stamina, requirement) {
-  return Math.max(2, requirement - stamina);
+// Falling short in a trial: the player still gets through, but that
+// attribute's stamina drops to 0 and they gain a negative trait:
+//   short by 1–3: a TNT matched to the attribute (cleared by Rest or Sleep)
+//   short by 4 or more: a CNT, Injured in that attribute (−2 to its total)
+export const TRIAL_SETBACK = { STR: 'winded', AGI: 'bruised', WIS: 'dazed', FAI: 'shaken' };
+export const CHRONIC_SHORTFALL = 4;
+export function trialSetback(attr, shortfall) {
+  if (shortfall <= 0) return null;
+  if (shortfall >= CHRONIC_SHORTFALL) return { id: 'injured', kind: 'CNT', attr };
+  return { id: TRIAL_SETBACK[attr], kind: 'TNT' };
 }
 
 // When a trial's only option can't be met, it becomes a lucky attempt.

@@ -489,7 +489,8 @@ export function availableActions(character, combat) {
   const abilities = character.abilities.filter(id => !getAbility(id).passive).map(id => {
     const a = getAbility(id);
     const cd = character.cooldowns[id] || 0;
-    return { id, name: a.name, enabled: cd === 0 && !!weapon, cooldownLeft: cd, speed: a.speed };
+    const winded = a.speed === 'Drawn' && hasTrait(character, 'winded');   // Winded: no Drawn actions
+    return { id, name: a.name, enabled: cd === 0 && !!weapon && !winded, cooldownLeft: cd, speed: a.speed, winded };
   });
   return { page1, abilities, weapon: weapon && weapon.name };
 }
@@ -523,6 +524,7 @@ export function submitAction(characterIn, combatIn, choice) {
     ability = getAbility(choice.abilityId);
     if (!c.abilities.includes(ability.id)) throw new Error('You have not learned ' + ability.name);
     if (c.cooldowns[ability.id]) throw new Error(ability.name + ' is cooling down');
+    if (ability.speed === 'Drawn' && hasTrait(c, 'winded')) throw new Error('Winded: you can’t use Drawn actions');
   } else if (!['pray', 'attack', 'block', 'item'].includes(action)) {
     throw new Error('Unknown action: ' + action);
   }
@@ -578,7 +580,7 @@ export function submitAction(characterIn, combatIn, choice) {
     P.advantageNext = false;
     removeTrait(c, 'emboldened');
   }
-  const playerAttackMod = netModifier(playerAdv, playerSlower);
+  const playerAttackMod = netModifier(playerAdv, playerSlower || hasTrait(c, 'bruised'));   // Bruised: Disadvantage
   const playerBlockMod = netModifier(false, hasCondition(P, 'offBalance'));
   let enemyAdv = false;
   if (mv.action === 'attack') { enemyAdv = E.advantageNext || !!mv.advantage; E.advantageNext = false; }
@@ -727,6 +729,12 @@ function resolvePlayer(ctx, o) {
     const pool = PRAY_TPTS.filter(id => !owned.has(id));
     const count = Math.min(5, (o.enemyOffensive ? 1 : 2) * mult);
     const got = pickDistinct(ctx.rng, pool, count);
+    // Prayer clears TNTs that Prayer can clear (Shaken, Fear, Enraged).
+    const cleared = ctx.c.traits.filter(t => t.kind === 'TNT' && TRAITS[t.id] && TRAITS[t.id].clearedBy.includes('prayer'));
+    if (cleared.length) {
+      ctx.c.traits = ctx.c.traits.filter(t => !cleared.includes(t));
+      lines.push(`Your prayer steadies you: no longer ${cleared.map(t => TRAITS[t.id].name).join(' or ')}.`);
+    }
     for (const id of got) {
       const def = TRAITS[id];
       ctx.c.traits.push(def.duration ? { id, kind: 'TPT', source: 'pray', left: def.duration, gainedAt: cb.exchange }
@@ -876,9 +884,12 @@ export function submitClash(characterIn, combatIn, direction) {
     cb.stats.clashWins += 1;
     lines.push('You read it and win the Clash!');
     const weapon = currentWeapon(ctx.c, cb.player);
+    // Shaken: Disadvantage in Clashes (the winning hit is weaker).
+    const shaken = hasTrait(ctx.c, 'shaken');
+    const mod = !shaken ? pc.playerAttackMod : pc.playerAttackMod === 'advantage' ? null : 'disadvantage';
     resolvePlayer(ctx, {
       action: ctx.ability ? 'ability' : 'attack', weapon, ability: ctx.ability, target: pc.playerTarget,
-      pSpeed: pc.pSpeed, eSpeed: pc.eSpeed, playerAttackMod: pc.playerAttackMod, clashWin: true,
+      pSpeed: pc.pSpeed, eSpeed: pc.eSpeed, playerAttackMod: mod, clashWin: true,
     });
     cb.player.advantageNext = true;
     addCondition(cb.enemy, 'offBalance', cb.exchange);

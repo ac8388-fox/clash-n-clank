@@ -906,3 +906,30 @@ for (const enemyId of ['werewolf', 'barrowKnight']) {
     ok(r.winRate < l.winRate - 0.5, `learning helps: learned ${p(l.winRate)} vs random ${p(r.winRate)}`);
   });
 }
+
+// --- Setback traits from trials ----------------------------------------------------------------
+
+test('Winded: no Drawn actions (Crusher can’t be used)', () => {
+  const s = fight('werewolf', 'crusher');
+  s.c.traits.push({ id: 'winded', kind: 'TNT' });
+  eq(C.availableActions(s.c, s.cb).abilities[0].enabled, false);
+  throws(() => C.submitAction(s.c, s.cb, { action: 'ability', abilityId: 'crusher', target: 'head' }));
+});
+test('Bruised: your attacks have Disadvantage', () => {
+  const s = plain(act(fight(), { action: 'pray' }));      // w2: bite (Fair) vs sword (Fair): no speed penalty
+  s.c.traits.push({ id: 'bruised', kind: 'TNT' });
+  eq(act(s, { action: 'attack', target: 'legs' }).cb.enemy.stamina.STR, WOLF.STR - 1, 'sword 3 halved to 1');
+});
+test('Shaken: a Clash you win hits with Disadvantage; Pray clears it', () => {
+  let s = plain(act(fight(), { action: 'pray' }));
+  s.c.traits.push({ id: 'shaken', kind: 'TNT' });
+  s = act(s, { action: 'attack', target: 'head' });
+  const r = clash(s, 'head');
+  eq(r.cb.enemy.stamina.STR, WOLF.STR - 1, 'sword 3 halved to 1');
+  const p = act(plain(fight()), { action: 'pray' });
+  const q = fight(); q.c.traits.push({ id: 'shaken', kind: 'TNT' });
+  const prayed = act(q, { action: 'pray' });
+  ok(!prayed.c.traits.some(t => t.id === 'shaken'), 'cleared by Prayer');
+  ok(prayed.lines.some(l => l.includes('no longer Shaken')), prayed.lines.join(' | '));
+  ok(p, 'ok');
+});

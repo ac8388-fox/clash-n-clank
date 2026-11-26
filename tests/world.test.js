@@ -85,33 +85,59 @@ test('Arriving at the Gorge starts its trial with the four options from the tabl
     ['down', 'WIS', 'Study the knots', 7], ['left', 'AGI', 'Dash across', 10]]);
   eq(TRIALS.crypt.options.map(o => [o.attr, o.requirement]), [['FAI', 8], ['STR', 12], ['WIS', 9], ['AGI', 9]]);
 });
-test('Trial check: success when the attribute’s current stamina meets the requirement', () => {
-  let s = goTo({ ...run(), character: noRacial(run().character) }, 'S');
-  const r = T.attemptTrial(s.character, closeFortune(s.world), { dir: 'down' });   // WIS 6 vs 7: fails
-  eq(r.outcome, 'failure');
-  const c = { ...noRacial(run().character) }; c.attrs = { ...c.attrs, WIS: { ...c.attrs.WIS, stamina: 7 } };
-  s = goTo({ character: c, world: run().world }, 'S');
-  eq(T.attemptTrial(c, closeFortune(s.world), { dir: 'down' }).outcome, 'success');
+test('Trial check: meeting the requirement is a clean pass, at no cost', () => {
+  const c = noRacial(run().character); c.attrs.WIS.stamina = 7;
+  const s = goTo({ character: c, world: run().world }, 'S');
+  const r = T.attemptTrial(c, closeFortune(s.world), { dir: 'down' });     // WIS 7 vs 7
+  eq(r.outcome, 'success');
+  eq(staminaOf(r.character), staminaOf(c)); eq(r.character.traits, c.traits);
+  ok(r.world.eventFlags.gorgeCrossed, 'across');
 });
-test('Phone check: failing Dash Across lowers your AGI bar by requirement − stamina (at least 2)', () => {
+test('Falling short: you still get through, that stamina drops to 0, and you gain a TNT (short by 1–3)', () => {
+  const s = goTo({ ...run(), character: noRacial(run().character) }, 'S');
+  const r = T.attemptTrial(s.character, closeFortune(s.world), { dir: 'down' });   // WIS 6 vs 7: short by 1
+  eq(r.outcome, 'shortfall');
+  ok(r.world.eventFlags.gorgeCrossed, 'still across');
+  eq(r.character.attrs.WIS.stamina, 0, 'WIS exhausted');
+  eq(r.character.attrs.STR.stamina, s.character.attrs.STR.stamina, 'only the attribute tried');
+  ok(r.character.traits.some(t => t.id === 'dazed' && t.kind === 'TNT'), 'Dazed');
+  eq(W.arrival(r.world).screen, 'travel', 'the trial is done');
+});
+test('Phone check: Dash Across on too little AGI (short by 4) exhausts AGI and leaves you Injured (a CNT)', () => {
   const s = goTo({ ...run(), character: noRacial(run().character) }, 'S');
   const r = T.attemptTrial(s.character, closeFortune(s.world), { dir: 'left' });   // AGI 6 vs 10
-  eq(r.outcome, 'failure');
-  eq(r.character.attrs.AGI.stamina, 6 - 4);
-  eq(r.character.attrs.STR.stamina, s.character.attrs.STR.stamina, 'only the attribute tried');
-  const near = noRacial(run().character); near.attrs.WIS.stamina = 6;
-  const s2 = goTo({ character: near, world: run().world }, 'S');
-  eq(T.attemptTrial(near, closeFortune(s2.world), { dir: 'down' }).character.attrs.WIS.stamina, 6 - 2, 'minimum 2');
+  eq(r.outcome, 'shortfall');
+  eq(r.character.attrs.AGI.stamina, 0);
+  const inj = r.character.traits.find(t => t.id === 'injured');
+  eq(inj, { id: 'injured', kind: 'CNT', attr: 'AGI', source: 'trial' });
+  eq(attrTotal(r.character, 'AGI'), 6 - 2, 'AGI total lowered by 2');
 });
-test('A failed trial leaves the event open: try another option', () => {
-  const s = goTo({ ...run(), character: noRacial(run().character) }, 'S');
-  const r1 = T.attemptTrial(s.character, closeFortune(s.world), { dir: 'left' });
-  ok(r1.world.trial, 'still in the trial'); eq(r1.next, 'trial');
-  const r2 = T.attemptTrial(r1.character, closeFortune(r1.world), { dir: 'up' });  // FAI 6 vs 8
-  eq(r2.outcome, 'failure');
-  const strong = noRacial(run().character); strong.attrs.FAI.stamina = 8;
-  const r3 = T.attemptTrial(strong, closeFortune(r2.world), { dir: 'up' });
-  eq(r3.outcome, 'success');
+test('Each attribute has its own temporary setback: Winded (STR), Bruised (AGI), Dazed (WIS), Shaken (FAI)', () => {
+  const tries = { up: 'shaken', right: 'winded', down: 'dazed', left: 'bruised' };
+  for (const [dir, id] of Object.entries(tries)) {
+    const c = noRacial(run().character);
+    const o = TRIALS.gorge.options.find(x => x.dir === dir);
+    c.attrs[o.attr].stamina = o.requirement - 1;                              // short by 1
+    const s = goTo({ character: c, world: run().world }, 'S');
+    const r = T.attemptTrial(c, closeFortune(s.world), { dir });
+    ok(r.character.traits.some(t => t.id === id), `${o.label} → ${id}`);
+  }
+});
+test('The options show what falling short would cost before you choose', () => {
+  const opts = T.trialOptions(noRacial(run().character), 'gorge');
+  eq(opts.map(o => [o.shortfall, T.setbackName(o.setback)]), [[2, 'Shaken'], [2, 'Winded'], [1, 'Dazed'], [4, 'Injured (AGI)']]);
+});
+test('Steeled shrugs off a trial’s TNT; the same TNT doesn’t stack', () => {
+  const c = noRacial(run().character); c.traits.push({ id: 'steeled', kind: 'TPT' });
+  const s = goTo({ character: c, world: run().world }, 'S');
+  const r = T.attemptTrial(c, closeFortune(s.world), { dir: 'down' });
+  ok(!r.character.traits.some(t => t.id === 'dazed' || t.id === 'steeled'), 'Steeled used, no Dazed');
+});
+test('Rest clears the temporary setbacks; Injured stays', () => {
+  const c = noRacial(run().character);
+  c.traits.push({ id: 'dazed', kind: 'TNT' }, { id: 'winded', kind: 'TNT' }, { id: 'injured', kind: 'CNT', attr: 'STR' });
+  const r = W.campRest(c, run().world);
+  eq(r.character.traits.filter(t => t.kind !== 'PPT' && t.kind !== 'PNT').map(t => t.id), ['injured']);
 });
 test('Phone check: the Sealed Crypt is reachable only after crossing the Gorge', () => {
   let s = goTo({ ...run(), character: noRacial(run().character) }, 'S');
@@ -156,17 +182,17 @@ function findTrialLucky(want) {
   for (let seed = 1; seed < 20000; seed++) {
     const s = goTo({ character: noRacial(run('human', seed).character), world: run('human', seed).world }, 'S');
     if (!s.world.trial.fortune.open) continue;
-    const r = T.attemptTrial(s.character, s.world, { dir: 'left', lucky: true });
+    const r = T.attemptTrial(s.character, s.world, { dir: 'down', lucky: true });
     if (r.lines[0].startsWith('Lucky!') === want) return { s, r };
   }
   throw new Error('no seed');
 }
-test('Trial lucky attempt: any lucky number passes; none fails worse than normal (double damage)', () => {
+test('Trial lucky attempt: any lucky number is a clean pass; none falls short badly (Injured, whatever the gap)', () => {
   const win = findTrialLucky(true);
-  eq(win.r.outcome, 'success');
+  eq(win.r.outcome, 'success'); eq(win.r.character.attrs.WIS.stamina, 6);
   const lose = findTrialLucky(false);
-  eq(lose.r.outcome, 'failure');
-  eq(lose.r.character.attrs.AGI.stamina, Math.max(0, 6 - 8), 'double the 4');
+  eq(lose.r.outcome, 'shortfall');
+  ok(lose.r.character.traits.some(t => t.id === 'injured' && t.attr === 'WIS'), 'Injured even though only 1 short');
 });
 test('Forced lucky attempt: when the only option left can’t be met, it rolls the dice', () => {
   ok(T.attemptTrial, 'exists');
@@ -174,7 +200,7 @@ test('Forced lucky attempt: when the only option left can’t be met, it rolls t
   const opts = T.trialOptions(c, 'crypt').map((o, i) => ({ ...o, disabled: i !== 1 }));
   ok(opts.filter(o => !o.disabled).length === 1 && !opts[1].canMeet, 'only Force the door, and STR 8 < 12');
 });
-test('Trial defeat: a failure that empties every pool ends the run', () => {
+test('Trial defeat: getting through on your last stamina ends the run', () => {
   const c = noRacial(run().character);
   for (const k of ATTRS) c.attrs[k].stamina = 0;
   c.attrs.AGI.stamina = 1;

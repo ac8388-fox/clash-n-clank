@@ -1,41 +1,46 @@
-// Trials (Build Spec → "Trials", "Rules engine": trial check, failure,
-// forced lucky attempt; "Character creation": racial ability, slice version).
+// Trials (Build Spec → "Trials", "Rules engine": Trial check, Falling short,
+// Forced lucky attempt; "Character creation": racial ability, slice version).
 //
 // A trial offers four options, one per direction (Up FAI, Right STR, Down WIS,
-// Left AGI). An option succeeds if the attribute's current stamina is at least
-// the requirement. A failure drains that attribute by (requirement − stamina),
-// at least 2, and the event stays open: try another option or come back later.
+// Left AGI). Whatever the player chooses, they get through:
+//   – meet the requirement (the attribute's current stamina is at least it):
+//     a clean pass, at no cost;
+//   – fall short: they still get through, but that attribute's stamina drops
+//     to 0 and they gain a negative trait (rules.js → trialSetback): a TNT
+//     for a shortfall of 1–3, or a CNT (Injured, −2 to that total) for 4+.
 //
 // Racial ability (slice version): while it is ready, it replaces the weakest
 // option (the biggest gap between requirement and the attribute's total) and
-// succeeds automatically; then it waits for a Rest.
+// succeeds cleanly; then it waits for a Rest.
 //
-// Lucky attempts: a Fortune opening (5% + Luck%, rolled each attempt) lets the
-// player tap the star and hold an option. Any lucky number passes the trial;
-// none fails it worse than normal (double damage). When the only option left
-// can't be met, it becomes a lucky attempt automatically.
+// Lucky attempts: a Fortune opening (5% + Luck%, rolled each visit) lets the
+// player tap the star and hold an option. Any lucky number is a clean pass;
+// none falls short badly: stamina to 0 and the CNT, whatever the shortfall.
+// When the only option left can't be met, it becomes a lucky attempt.
 //
 // Pure functions: they return new character and world objects. Randomness goes
 // through the seeded generator in world.rngState.
 
 import { getTrial, RACIAL_TRIAL_TEXT } from '../data/events.js';
 import { getRace } from '../data/races.js';
+import { TRAITS } from '../data/traits.js';
 import {
-  attrTotal, trialCheck, trialFailureDamage, isForcedLuckyAttempt, useAttribute,
-  damageCharacter, rollFortune, rollLuckyDice, luckyResult, luckOf, isDefeated, staminaOf,
+  attrTotal, trialCheck, trialSetback, isForcedLuckyAttempt, useAttribute,
+  rollFortune, rollLuckyDice, luckyResult, luckOf, isDefeated, staminaOf,
 } from './rules.js';
 import { createRng } from './random.js';
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
 // The options as the player sees them now (with the racial ability, if ready).
+// Each shows what falling short would cost: shortfall and setback.
 export function trialOptions(character, trialId) {
   const t = getTrial(trialId);
-  const opts = t.options.map(o => ({
-    ...o,
-    stamina: character.attrs[o.attr].stamina,
-    canMeet: trialCheck(character.attrs[o.attr].stamina, o.requirement),
-  }));
+  const opts = t.options.map(o => {
+    const stamina = character.attrs[o.attr].stamina;
+    const shortfall = Math.max(0, o.requirement - stamina);
+    return { ...o, stamina, canMeet: trialCheck(stamina, o.requirement), shortfall, setback: trialSetback(o.attr, shortfall) };
+  });
   if (character.racialReady) {
     let weakest = 0, gap = -Infinity;
     opts.forEach((o, i) => {
@@ -45,13 +50,19 @@ export function trialOptions(character, trialId) {
     const race = getRace(character.raceId);
     opts[weakest] = {
       dir: opts[weakest].dir, attr: null, racial: true, label: race.ability,
-      requirement: 0, canMeet: true, replaces: opts[weakest].label,
+      requirement: 0, canMeet: true, shortfall: 0, setback: null, replaces: opts[weakest].label,
     };
   }
   return opts;
 }
 
-// Start (or return to) a trial: roll a Fortune opening for the first attempt.
+// Words for a setback trait ("Bruised", "Injured (STR)").
+export function setbackName(setback) {
+  if (!setback) return '';
+  return setback.attr ? `${TRAITS[setback.id].name} (${setback.attr})` : TRAITS[setback.id].name;
+}
+
+// Start (or return to) a trial: roll a Fortune opening.
 export function beginTrial(character, world, trialId) {
   const w = clone(world);
   w.trial = { id: trialId, fortune: rollTrialFortune(character, w, trialId) };
@@ -67,8 +78,24 @@ function rollTrialFortune(character, w, trialId) {
   return { open, hint };
 }
 
+// Gain a setback trait (Steeled ignores the next TNT; the same TNT doesn't stack).
+function gainSetback(c, setback, lines) {
+  if (setback.kind === 'TNT') {
+    if (c.traits.some(t => t.id === 'steeled')) {
+      c.traits = c.traits.filter(t => t.id !== 'steeled');
+      lines.push(`Steeled, you shrug off being ${TRAITS[setback.id].name}.`);
+      return;
+    }
+    if (c.traits.some(t => t.id === setback.id)) { lines.push(`You are still ${TRAITS[setback.id].name}.`); return; }
+  }
+  c.traits.push({ ...setback, source: 'trial' });
+  lines.push(setback.kind === 'CNT'
+    ? `It costs you: you are ${setbackName(setback)}, −2 to your ${setback.attr} total until it is treated.`
+    : `It costs you: you are ${TRAITS[setback.id].name} (${TRAITS[setback.id].effect}).`);
+}
+
 // Attempt one option. choice: { dir, lucky }.
-// Returns { character, world, outcome: 'success' | 'failure' | 'defeat', lines, next }.
+// Returns { character, world, outcome: 'success' | 'shortfall' | 'defeat', lines, next }.
 export function attemptTrial(characterIn, worldIn, choice) {
   let c = clone(characterIn);
   const w = clone(worldIn);
@@ -78,19 +105,20 @@ export function attemptTrial(characterIn, worldIn, choice) {
   const o = opts.find(x => x.dir === choice.dir);
   if (!o) throw new Error('No option that way');
   const lines = [];
-  let success = false;
+  let clean = false;
+  let setback = null;
 
   if (o.racial) {
     c.racialReady = false;
-    success = true;
+    clean = true;
     lines.push(RACIAL_TRIAL_TEXT[c.raceId] || `${o.label}: it works.`);
   } else {
     c = useAttribute(c, o.attr);                          // at 0 stamina it wears Natural down
     const stamina = c.attrs[o.attr].stamina;
+    const shortfall = Math.max(0, o.requirement - stamina);
     // The only option left (others disabled) and it can't be met: a forced lucky attempt.
     const forced = isForcedLuckyAttempt(opts.filter(x => !x.disabled), c);
     const lucky = forced || (choice.lucky && w.trial.fortune && w.trial.fortune.open);
-    let damage = 0;
     if (lucky) {
       const rng = createRng(w.rngState);
       const rolls = rollLuckyDice(luckOf(c), rng);
@@ -98,37 +126,32 @@ export function attemptTrial(characterIn, worldIn, choice) {
       const res = luckyResult(rolls, c.luckyNumber);
       const shown = rolls.map(r => `d${r.sides}: ${r.value}`).join(', ');
       if (res.success) {
-        success = true;
+        clean = true;
         lines.push(`Lucky! (${shown}) ${o.label} works against the odds.`);
       } else {
-        damage = 2 * trialFailureDamage(stamina, o.requirement);
-        lines.push(`No luck. (${shown}) It goes badly wrong.`);
+        setback = { id: 'injured', kind: 'CNT', attr: o.attr };
+        lines.push(`No luck. (${shown}) ${o.label}: you get through, but it goes badly.`);
       }
-    } else if (trialCheck(stamina, o.requirement)) {
-      success = true;
+    } else if (shortfall === 0) {
+      clean = true;
       lines.push(`${o.label}: you manage it (${o.attr} ${stamina} against ${o.requirement}).`);
     } else {
-      damage = trialFailureDamage(stamina, o.requirement);
-      lines.push(`${o.label}: not enough (${o.attr} ${stamina} against ${o.requirement}).`);
+      setback = trialSetback(o.attr, shortfall);
+      lines.push(`${o.label}: short by ${shortfall} (${o.attr} ${stamina} against ${o.requirement}). You force your way through.`);
     }
-    if (!success) {
-      const r = damageCharacter(c, o.attr, damage);
-      c = r.character;
-      lines.push(`${t.failure.text} ${r.applied.map(a => `−${a.amount} ${a.attr}`).join(', ')}.`);
+    if (!clean) {
+      lines.push(`${t.shortfall.text} ${o.attr} drops to 0.`);
+      c.attrs[o.attr].stamina = 0;
+      gainSetback(c, setback, lines);
     }
   }
 
-  if (success) {
-    lines.push(t.success.text);
-    w.eventFlags = { ...w.eventFlags, ...t.success.flags };
-    w.trial = null;
-    return { character: c, world: w, outcome: 'success', lines, next: t.success.next };
-  }
+  lines.push(t.success.text);
+  w.eventFlags = { ...w.eventFlags, ...t.success.flags };
+  w.trial = null;
   if (isDefeated(staminaOf(c))) {
-    w.trial = null;
-    lines.push('You collapse. Your strength is spent.');
+    lines.push('You collapse on the far side. Your strength is spent.');
     return { character: c, world: w, outcome: 'defeat', lines, next: 'end' };
   }
-  w.trial.fortune = rollTrialFortune(c, w, t.id);                // a fresh chance for the next attempt
-  return { character: c, world: w, outcome: 'failure', lines, next: 'trial' };
+  return { character: c, world: w, outcome: clean ? 'success' : 'shortfall', lines, next: t.success.next };
 }

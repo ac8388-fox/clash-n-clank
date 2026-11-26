@@ -286,9 +286,19 @@ test('Predictable: same action at the same target two exchanges running', () => 
 test('Trial check: success if current stamina ≥ the requirement', () => {
   ok(R.trialCheck(8, 8)); ok(R.trialCheck(9, 8)); ok(!R.trialCheck(7, 8));
 });
-test('Trial failure: damage = requirement − stamina, minimum 2', () => {
-  eq(R.trialFailureDamage(6, 10), 4);
-  eq(R.trialFailureDamage(9, 10), 2);
+test('Falling short in a trial: a TNT for 1–3 short, matched to the attribute; Injured (a CNT) for 4 or more', () => {
+  eq(R.trialSetback('AGI', 0), null);
+  eq(R.trialSetback('STR', 1), { id: 'winded', kind: 'TNT' });
+  eq(R.trialSetback('AGI', 3), { id: 'bruised', kind: 'TNT' });
+  eq(R.trialSetback('WIS', 2), { id: 'dazed', kind: 'TNT' });
+  eq(R.trialSetback('FAI', 3), { id: 'shaken', kind: 'TNT' });
+  eq(R.trialSetback('STR', 4), { id: 'injured', kind: 'CNT', attr: 'STR' });
+});
+test('Injured lowers that attribute’s total by 2 (and nothing else)', () => {
+  const c = human();
+  c.traits.push({ id: 'injured', kind: 'CNT', attr: 'STR' });
+  eq(R.attrTotal(c, 'STR'), 8 - 2); eq(R.attrTotal(c, 'AGI'), 6);
+  eq(R.luckOf(c), R.luckOf(human()), 'Luck uses Natural + Class, so it is unchanged');
 });
 test('Forced lucky attempt: only when the only option can’t be met', () => {
   const c = human(); // STR 8

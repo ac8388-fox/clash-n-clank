@@ -179,9 +179,9 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Cooldowns | Swift 1 exchange, Fair 2, Drawn 3; Mastery and racial ability once per Rest |
 | Pray | One random combat TPT (Focused, Emboldened, Steeled, Blessed, Nimble), or two if the enemy took no offensive action |
 | Predictable | Repeating the same action at the same target two exchanges running: the enemy's next step is a counter, an attack with its fastest weapon and Advantage, aimed at random (never at a target you have been Blocking) |
-| Trial check | Success if the attribute's current stamina ≥ the requirement |
-| Trial failure | Damage to that attribute's stamina = requirement − stamina, minimum 2 |
-| Forced lucky attempt | When a trial's only option can't be met, the option becomes a lucky attempt |
+| Trial check | Every option gets the player through. A clean pass, at no cost, if the attribute's current stamina ≥ the requirement |
+| Falling short | If the attribute's stamina is below the requirement, the player still gets through, but that stamina drops to 0 and they gain a negative trait. Short by 1–3: a TNT matched to the attribute (STR Winded: no Drawn actions; AGI Bruised: Disadvantage on attacks; WIS Dazed: no tells; FAI Shaken: Disadvantage in Clashes); cleared by Rest (Bruised by Sleep). Short by 4 or more: a CNT, Injured in that attribute (−2 to its total until treated; no treatment exists in Slice 1). Steeled ignores the TNT. The options show the cost before the player chooses |
+| Forced lucky attempt | When a trial's only option can't be met, the option becomes a lucky attempt (any lucky number is a clean pass; none falls short badly: stamina to 0 and Injured, whatever the gap). The same applies to a chosen lucky attempt in a trial |
 | Combat fatigue | After a fight, each attribute's stamina drops by half the number of actions that used it, rounded up |
 | Action attributes | Pray FAI, Attack = the weapon's attribute, Block WIS, Item AGI, abilities their listed attribute |
 | Rest | +50% of each total to stamina, clears Rest-cleared TNTs, resets Rest abilities, takes one part of the day |
@@ -238,7 +238,7 @@ Five events, two trials, two enemies, and one class are enough to exercise every
 | Hills | Combat | Camp | Camp | Camp | Crossroads |
 | Village | Camp (safe Sleep) | Camp | Camp | Crossroads | Camp |
 
-A failed trial deals its damage and leaves the event open, so the player can try another option or come back later.
+Every trial option gets the player through: meeting the requirement is a clean pass, and falling short costs that attribute's stamina and leaves a TNT or CNT (see “Falling short”).
 
 **Trials**
 
@@ -374,7 +374,7 @@ Slice 1 is done when a new player can finish the loop on a phone without help, a
 - [ ] Create a character from four random races and four random occupations, with a lucky number
 - [ ] Starting Luck and dice count match the race table
 - [ ] Travel from the Crossroads in all four directions, including Camp for the blocked West, with time advancing each journey
-- [ ] Pass and fail both trials; failure damages the right pool; the racial ability replaces the weakest option
+- [ ] Get through both trials both ways: a clean pass when the requirement is met, and falling short (that stamina to 0, plus a TNT for 1–3 short or Injured for 4+); the racial ability replaces the weakest option
 - [ ] Fight the werewolf and the Barrow Knight using the exchange loop, with clues and gaze captions
 - [ ] No tells by default: captions are neutral and don't give the move away; tells come only from a source (Focused from Pray gives reverse tells for 3 exchanges; Dazed blocks them); tells are always true and say what the enemy won't do; the WIS + FAI comparison sets how often a source works; Night lowers a tell one step; Clashes follow the same rule
 - [ ] The character screen shows “Reading the <enemy>: …” in combat (good / fair / poor with a source, otherwise no tells)

@@ -114,7 +114,7 @@
 
 <script type="module">
   import { newRun, exitsFor, arrival, go, campRest, campSleep, canSleep, beginFight, endFight, enemyName } from './engine/world.js';
-  import { trialOptions, attemptTrial, beginTrial } from './engine/trial.js';
+  import { trialOptions, attemptTrial, beginTrial, setbackName } from './engine/trial.js';
   import { submitAction, submitClash, availableActions, readingLabel } from './engine/combat.js';
   import { attrTotal, ATTRS, luckOf } from './engine/rules.js';
   import { getEvent, getTrial, DIR_FOR_BUTTON } from './data/events.js';
@@ -127,7 +127,7 @@
   import { holdWords } from './ui/settings.js';
 
   const SAVE = 'clash-n-clank.worldtest';
-  const SAVE_VERSION = 1;
+  const SAVE_VERSION = 2;   // bump when rules change; older saves start fresh
   const DIRS = ['up', 'right', 'down', 'left'];
   const TARGET_OF = { up: 'head', left: 'left', right: 'right', down: 'legs' };
   const TARGET_NAME = { head: 'Head', left: 'Left', right: 'Right', legs: 'Legs' };
@@ -178,7 +178,7 @@
     g.character = r.character; g.world = r.world; ui.armed = false;
     say(r.lines);
     if (r.outcome === 'defeat') return finish('defeat');
-    if (r.outcome === 'success') {
+    if (r.outcome === 'success' || r.outcome === 'shortfall') {
       if (r.next === 'combat') { g.text = getEvent(g.world.eventId).doneText; startFight(getEvent(g.world.eventId).enemy); }
       else { g.screen = 'travel'; g.text = getEvent(g.world.eventId).doneText || g.text; }
     }
@@ -247,7 +247,9 @@
       for (const o of trialOptions(c, g.world.trial.id)) {
         s[o.dir] = {
           label: o.label,
-          sub: o.racial ? `racial ability: sure (replaces ${o.replaces})` : `${o.attr} ${c.attrs[o.attr].stamina} / needs ${o.requirement}`,
+          sub: o.racial ? `racial ability: sure (replaces ${o.replaces})`
+             : o.shortfall ? `${o.attr} ${c.attrs[o.attr].stamina} / needs ${o.requirement} · short ${o.shortfall}: ${o.attr} to 0, ${setbackName(o.setback)}`
+             : `${o.attr} ${c.attrs[o.attr].stamina} / needs ${o.requirement} · clean`,
           enabled: true, run: () => tryTrial(o.dir),
         };
       }
@@ -336,6 +338,7 @@
       if (g.combat.enemy.enraged) bits.push('<span class="cond">Enraged</span>');
     }
     for (const t of c.traits.filter(t => t.kind === 'TPT')) bits.push(`<span class="tpt">${TRAITS[t.id].name}${t.left ? ` (${t.left})` : ''}</span>`);
+    for (const t of c.traits.filter(t => t.kind === 'TNT' || t.kind === 'CNT')) bits.push(`<span class="cond">${TRAITS[t.id].name}${t.attr ? ` (${t.attr} −2)` : ''}</span>`);
     bits.push(`Draughts ×${(c.pack.find(p => p.itemId === 'herbalDraught') || { qty: 0 }).qty}`);
     $('status').innerHTML = bits.join(' · ');
 

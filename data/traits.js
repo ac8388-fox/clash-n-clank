@@ -20,14 +20,20 @@ export const TRAITS = {
   // TNTs
   winded:     { id: 'winded',     name: 'Winded',     kind: 'TNT', effect: "Can't use Drawn actions",                 clearedBy: ['rest', 'sleep'] },
   dazed:      { id: 'dazed',      name: 'Dazed',      kind: 'TNT', effect: 'No tells at all',                         clearedBy: ['rest', 'sleep'], blocksTells: true },
-  shaken:     { id: 'shaken',     name: 'Shaken',     kind: 'TNT', effect: 'Disadvantage in Clashes',                 clearedBy: ['rest', 'prayer', 'sleep'] },
+  shaken:     { id: 'shaken',     name: 'Shaken',     kind: 'TNT', effect: 'a Clash you win hits with Disadvantage', clearedBy: ['rest', 'prayer', 'sleep'] },
   fatigued:   { id: 'fatigued',   name: 'Fatigued',   kind: 'TNT', effect: "Abilities that reset through Rest don't reset", clearedBy: ['sleep'] },
-  bruised:    { id: 'bruised',    name: 'Bruised',    kind: 'TNT', effect: 'Disadvantage on attacks with the bruised limb', clearedBy: ['sleep'] },
+  bruised:    { id: 'bruised',    name: 'Bruised',    kind: 'TNT', effect: 'Disadvantage on your attacks', clearedBy: ['sleep'] },
   bleeding:   { id: 'bleeding',   name: 'Bleeding',   kind: 'TNT', effect: 'Lose stamina each exchange',              clearedBy: ['treatment', 'sleep'] },
   fear:       { id: 'fear',       name: 'Fear',       kind: 'TNT', effect: 'Disadvantage against its source',         clearedBy: ['rest', 'prayer', 'sleep'] },
   enraged:    { id: 'enraged',    name: 'Enraged',    kind: 'TNT', effect: 'More damage, less accuracy',              clearedBy: ['rest', 'prayer', 'sleep'] },
   offBalance: { id: 'offBalance', name: 'Off-Balance',kind: 'TNT', effect: 'Attacks miss; Disadvantage on Blocks; no counters', clearedBy: ['exchange', 'rest', 'sleep'] },
   hindered:   { id: 'hindered',   name: 'Hindered',   kind: 'TNT', effect: 'Next action one speed tier slower',       clearedBy: ['exchange', 'rest', 'sleep'] },
+
+  // CNTs
+  // Injured: weakens one attribute. In the slice: −2 to that attribute's total
+  // (the trait records which attribute). Removed by a Herbalist, Physician,
+  // items, or events; none of those exist in Slice 1 yet.
+  injured:    { id: 'injured',    name: 'Injured',    kind: 'CNT', effect: '−2 to one attribute’s total', clearedBy: ['treatment'], totalPenalty: 2 },
 };
 
 // The five combat TPTs Pray picks from (Build Spec → "Pray").

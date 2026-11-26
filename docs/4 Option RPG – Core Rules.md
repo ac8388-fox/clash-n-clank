@@ -42,7 +42,7 @@ Four attributes (STR, AGI, WIS, FAI) double as stamina, and Luck is calculated f
 
 **Damage and fatigue** (there is no health pool)
 
-- **Trials and events:** a failed attempt drains stamina from the attribute attempted. When the only option's requirement can't be met, the player is forced into a lucky attempt.
+- **Trials and events:** every option gets the player through. Meeting the requirement is a clean pass. Falling short still gets them through, but exhausts the attribute attempted (its stamina drops to 0) and leaves a negative trait: a TNT for a small shortfall, or a CNT such as Injured for a big one. When the only option's requirement can't be met, the player is forced into a lucky attempt.
 - **Combat damage:** every weapon and ability carries an attribute, and its hits drain the target's stamina in that attribute, applied as the hits land. If that stamina is already 0, or a hit is bigger than what remains, the excess goes to the leftmost pool that still has stamina, in the order STR, AGI, WIS, FAI, so Faith is always the last to fall. A character is defeated when all four stamina pools reach 0.
 - **Combat fatigue:** combat actions cost nothing in the moment. After the fight, stamina drops in proportion to the attributes the character actually used (a mostly-Faith fight drains Faith), on top of any damage taken.
 - **Empty stamina:** stamina is the current pool out of the attribute's total (12/36 means 12 stamina of a 36 total). While an attribute's stamina sits at 0, each action using it lowers that total by 1, and the stamina stays at 0. Lost points come off the Natural layer, so Luck recalculates (never below the race floor). Stamina refills through Rest, Sleep, Prayer, and items; the total only grows back through events, class levels, and permanent items. Choices after a fight (Rest, Sleep, Prayer, items) matter most.
@@ -83,7 +83,7 @@ Percentages are the chance of rolling at least one lucky number.
 
 | Lucky dice rolled | Outcome |
 | --- | --- |
-| None | The enemy counters and you gain a TNT; in a trial, the option fails worse than normal |
+| None | The enemy counters and you gain a TNT; in a trial, you get through but fall short badly (that stamina to 0 and a CNT) |
 | 1 | Critical ×2 |
 | 2 | Critical ×3 |
 | 3 or more | ×4, and so on |

@@ -8,7 +8,9 @@
 //   { requires: 'gorgeCrossed', to, teaser, otherwise: { camp: true, teaser } }
 //
 // Trial options: one per direction. Up FAI, Right STR, Down WIS, Left AGI.
-// success: text, the world flags it sets, and what happens next.
+// Every option gets the player through (see engine/trial.js): success holds
+// the text, the world flags it sets, and what happens next; shortfall is the
+// extra line when they get through by falling short.
 
 export const EVENTS = {
   crossroads: {
@@ -81,7 +83,7 @@ export const TRIALS = {
     ],
     success: { text: 'You reach the far side. Steps lead down into the dark to the south.', flags: { gorgeCrossed: true }, next: 'travel' },
     fortuneHints: ['The wind drops for a moment.', 'The bridge steadies between gusts.'],
-    failure: { text: 'The bridge bucks under you and you scramble back, bruised.' },
+    shortfall: { text: 'The bridge bucks and twists; you claw your way across, spent.' },
   },
   crypt: {
     id: 'crypt', name: 'The Sealed Crypt',
@@ -94,7 +96,7 @@ export const TRIALS = {
     ],
     success: { text: 'The seal cracks. Armor grinds in the dark: something was waiting.', flags: { cryptOpen: true }, next: 'combat' },
     fortuneHints: ['A rune flickers, half awake.', 'Something shifts behind the door.'],
-    failure: { text: 'The seal holds, and the effort costs you.' },
+    shortfall: { text: 'The seal gives at last, but the effort leaves you spent.' },
   },
 };
 
