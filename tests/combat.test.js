@@ -1,8 +1,9 @@
 // Automatic tests for the combat exchange loop (Build Spec → "Combat resolution",
 // "Enemy patterns", feints, the repetition counter, and the Step 2 phone checks).
 //
-// Most tests pin the enemy to its MAIN action with force(), so the rules can
-// be checked exactly; the feint tests pick variants on purpose.
+// Most tests pin the enemy to the MAIN move of its normal pattern step with
+// force() (not a feint, a flinch, or a guard), so the rules can be checked
+// exactly; the feint, hiding, and blocking tests pick on purpose.
 
 import { test, slowTest, eq, ok, throws } from './harness.js';
 import * as C from '../engine/combat.js';
@@ -13,13 +14,27 @@ import { practiceFighter, simulateFight, learnedPolicy, learnedClash, randomPoli
 const WOLF = ENEMIES.werewolf.attrs;     // { STR: 7, AGI: 7, WIS: 3, FAI: 2 }
 const KNIGHT = ENEMIES.barrowKnight.attrs;
 
-// Pin the enemy to the main action (or a named variant) of its current step.
+// Pin the enemy to the main move of its normal step (the last option; guard
+// and flinch come first), or to a named variant.
 function force(s, variantId) {
   if (s.cb.current) {
-    s.cb = C.withVariant(s.cb, variantId || C.stepFor(s.cb).variants[0].id);
+    const opts = s.cb.current.options;
+    s.cb = C.withVariant(s.cb, variantId || opts[opts.length - 1].step.variants[0].id);
     s.cb.current.fortune.open = false;
   }
   return s;
+}
+// Run a test with hiding switched off, so clue counts can be checked exactly.
+function noHiding(fn) {
+  const saved = Object.values(ENEMIES).map(e => e.hideChance);
+  Object.values(ENEMIES).forEach(e => { e.hideChance = 0; });
+  try { fn(); } finally { Object.values(ENEMIES).forEach((e, i) => { e.hideChance = saved[i]; }); }
+}
+// A Human Fighter with WIS 14 (WIS + FAI = 20): sees two clues.
+function sharpFighter() {
+  const c = practiceFighter();
+  c.attrs.WIS.natural = 14; c.attrs.WIS.stamina = 14;
+  return c;
 }
 function fight(enemyId = 'werewolf', ability = 'planB', seed = 1, raceId = 'human') {
   const c = practiceFighter(ability, raceId);
@@ -44,37 +59,89 @@ test('Werewolf opens with step 1: “Its eyes drop to your legs.”', () => {
   eq(step(s), 'w1');
   eq(s.cb.current.caption, 'Its eyes drop to your legs.');
 });
-test('Clues: a Human Fighter (1 clue) sees only the shared first clue', () => {
+test('Clues: a starting Human Fighter sees one clue, the shared first clue', () => noHiding(() => {
   const cb = C.startCombat(practiceFighter(), 'werewolf', { seed: 1 });
   eq(cb.current.tells, ['Its eyes are on your legs']);
   eq(cb.current.tellCount, 2);
-});
-test('Clues: a second clue tells the main action apart from the feint', () => {
-  const g = practiceFighter('planB', 'gnome');   // WIS 10 + FAI 5 = 15 → 2 clues
+}));
+test('Clues: with WIS + FAI 20, the second clue tells the main move apart from the feint', () => noHiding(() => {
   const seen = new Set();
   for (let seed = 1; seed <= 40; seed++) {
-    const cb = C.startCombat(g, 'werewolf', { seed });
+    const cb = C.startCombat(sharpFighter(), 'werewolf', { seed });
     eq(cb.current.tells[0], 'Its eyes are on your legs');
     const second = cb.current.tells[1];
     eq(second, cb.current.variantId === 'w1-legs' ? 'Its shoulder drops low' : 'A growl from your left');
     seen.add(second);
   }
-  eq(seen.size, 2, 'both the main action and the feint showed up');
-});
-test('Clues: Focused gives one extra clue for one exchange', () => {
+  eq(seen.size, 2, 'both the main move and the feint showed up');
+}));
+test('Clues: Focused gives one extra clue for one exchange', () => noHiding(() => {
   const c = practiceFighter();
   c.traits.push({ id: 'focused', kind: 'TPT' });
   const cb = C.startCombat(c, 'werewolf', { seed: 1 });
   eq(cb.current.tells.length, 2);
   const r = C.submitAction(c, cb, { action: 'block', target: 'legs' });
   ok(!r.character.traits.some(t => t.id === 'focused'), 'used up');
-});
-test('Clues: one fewer at Night (the caption still shows)', () => {
+}));
+test('Clues: one fewer at Night (the caption still shows)', () => noHiding(() => {
   const h = C.startCombat(practiceFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' });
   eq(h.current.tells.length, 0);
   eq(h.current.caption, 'Its eyes drop to your legs.');
-  const g = C.startCombat(practiceFighter('planB', 'gnome'), 'werewolf', { seed: 1, timeOfDay: 'Night' });
-  eq(g.current.tells.length, 1);
+  eq(C.startCombat(sharpFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' }).current.tells.length, 1);
+}));
+
+// --- Hiding intent ----------------------------------------------------------------------
+
+function hideRate(enemyId, character, N = 3000) {
+  let hidden = 0;
+  for (let seed = 1; seed <= N; seed++) if (C.startCombat(character, enemyId, { seed }).current.hidden) hidden++;
+  return hidden / N;
+}
+test('Hiding: some exchanges show no clues and a neutral caption, but the enemy still commits a move', () => {
+  let found = null;
+  for (let seed = 1; !found && seed < 500; seed++) {
+    const cb = C.startCombat(practiceFighter(), 'werewolf', { seed });
+    if (cb.current.hidden) found = cb;
+  }
+  ok(found, 'a hidden exchange happened');
+  eq(found.current.tells, []);
+  ok(ENEMIES.werewolf.hiddenCaptions.includes(found.current.caption), 'neutral caption: ' + found.current.caption);
+  ok(C.moveFor(found), 'it still committed to a move');
+});
+test('Hiding: happens at the set rate for a Human Fighter (base chance less 20%)', () => {
+  for (const id of ['werewolf', 'barrowKnight']) {
+    const expect = ENEMIES[id].hideChance * 0.8;
+    const got = hideRate(id, practiceFighter());
+    ok(Math.abs(got - expect) < 0.03, `${id}: ${got.toFixed(3)} vs ${expect.toFixed(3)}`);
+  }
+});
+test('Hiding: the barrow knight hides more often than the werewolf', () => {
+  ok(ENEMIES.barrowKnight.hideChance > ENEMIES.werewolf.hideChance, 'base chance');
+  ok(hideRate('barrowKnight', practiceFighter(), 2000) > hideRate('werewolf', practiceFighter(), 2000), 'in play');
+});
+test('Hiding: high WIS + FAI and Luck lower the chance, but never to zero', () => {
+  const sage = practiceFighter();
+  sage.attrs.WIS.natural = 40; sage.attrs.WIS.stamina = 40;   // WIS + FAI + Luck well over 50
+  const base = hideRate('werewolf', practiceFighter(), 2000);
+  const low = hideRate('werewolf', sage, 2000);
+  ok(low < base, `${low.toFixed(3)} < ${base.toFixed(3)}`);
+  ok(low > 0.08, 'still hides: ' + low.toFixed(3));
+});
+test('Hiding: an Enraged enemy hides more often; the howl itself is never hidden', () => {
+  let calm = 0, wild = 0;
+  for (let seed = 1; seed <= 2000; seed++) {
+    const cb = C.startCombat(practiceFighter(), 'werewolf', { seed });
+    if (cb.current.hidden) calm++;
+    const e = C.beginExchange(practiceFighter(), { ...cb, exchange: 0, enemy: { ...cb.enemy, enraged: true, enrageUsed: true, loopIndex: 0 } });
+    if (e.current.hidden) wild++;
+  }
+  ok(wild > calm * 1.3, `${wild} vs ${calm}`);
+  for (let seed = 1; seed <= 300; seed++) {
+    const s = fight('werewolf', 'planB', seed);
+    s.cb.enemy.stamina = { STR: 2, AGI: 2, WIS: 2, FAI: 2 };
+    const b = C.beginExchange(s.c, s.cb);
+    eq(b.current.stepId, 'w5'); ok(!b.current.hidden, 'howl shown');
+  }
 });
 
 // --- Feints -------------------------------------------------------------------------
@@ -88,6 +155,7 @@ test('Feints: every step’s variants share the first clue and caption; second c
       for (const v of st.variants) ok(e.tellText[v.second], `${v.id} second clue has words`);
       ok(st.variants.length === 1 || (st.variants.length >= 2 && st.variants.length <= 3), `${st.id} has 1–2 feints`);
     }
+    for (const t of C.TARGETS) ok(e.blockTells[t], `${e.id} has a Block clue for ${t}`);
   }
 });
 test('Feints: the enemy usually does the main action; feints come at the set rate', () => {
@@ -173,11 +241,81 @@ test('Below half stamina: it howls at the moon, becomes Enraged, once only', () 
   ok(step(s) !== 'w5', 'not repeated');
   eq(s.c.traits.filter(t => t.kind === 'TPT').length, 2, 'Pray gives two TPTs when the enemy took no offensive action');
 });
-test('Enraged: its attacks deal 1 more damage and you see one fewer clue', () => {
+test('Enraged: its attacks deal 1 more damage (and it hides more often: see Hiding)', () => noHiding(() => {
   const s = fight(); s.cb.enemy.enraged = true;
   s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 0 } }); force(s);
-  eq(s.cb.current.tells.length, 0);
+  eq(s.cb.current.tells.length, 1, 'clues are not taken away');
   eq(act(s, { action: 'pray' }).c.attrs.AGI.stamina, 6 - 4);
+}));
+
+// --- Enemy blocks ---------------------------------------------------------------------------
+
+test('Enemy Block: a Block on the spot you attack stops your hit; another spot still lands', () => {
+  let s = act(fight(), { action: 'pray' }, null);     // to w2
+  s = force(s, 'w2-guard');                           // its feint: Block → Head
+  eq(act(s, { action: 'attack', target: 'head' }).cb.enemy.stamina, s.cb.enemy.stamina);
+  ok(act(s, { action: 'attack', target: 'legs' }).cb.enemy.stamina.STR < s.cb.enemy.stamina.STR, 'legs hit');
+});
+test('Enemy Block: has its own second clue, so a careful player can see it coming', () => {
+  const w2 = ENEMIES.werewolf.pattern[1];
+  const g = w2.variants.find(v => v.action === 'block');
+  eq(C.variantTells(ENEMIES.werewolf, w2, g), ['Its hackles rise', 'It ducks its head low']);
+});
+test('Enemy Block: while it blocks it isn’t attacking, so Pray gives two blessings', () => {
+  const s = force(act(fight(), { action: 'pray' }), 'w2-guard');
+  s.c.traits = s.c.traits.filter(t => t.kind !== 'TPT');
+  eq(act(s, { action: 'pray' }).c.traits.filter(t => t.kind === 'TPT').length, 2);
+});
+test('Enemy Block: when it is Off-Balance its Block only halves your hit', () => {
+  const s = force(act(fight(), { action: 'pray' }), 'w2-guard');
+  s.cb.enemy.conditions.push({ id: 'offBalance', until: s.cb.exchange });
+  eq(act(s, { action: 'attack', target: 'head' }).cb.enemy.stamina.STR, WOLF.STR - 2, 'sword 3, halved up to 2');
+});
+test('Flinch: after a hard hit it may flinch, and its main move Blocks the spot just hit', () => {
+  let s = act(fight(), { action: 'pray' });                 // w2: bite (Fair) vs sword (Fair)
+  s = act(s, { action: 'attack', target: 'legs' });          // sword lands 3 on the legs: a hard hit
+  const opts = s.cb.current.options;
+  const fl = opts.find(o => o.step.when === 'flinch');
+  ok(fl, 'flinch is possible');
+  eq(fl.p, ENEMIES.werewolf.flinchChance);
+  eq(fl.step.variants[0].action, 'block'); eq(fl.step.variants[0].target, 'legs');
+  eq(C.variantTells(ENEMIES.werewolf, fl.step, fl.step.variants[0]), ['It flinches from the blow', 'It pulls its legs in']);
+});
+test('Flinch: never twice running', () => {
+  let s = act(fight(), { action: 'pray' });
+  s = act(s, { action: 'attack', target: 'legs' }, 'flinch-block-legs');
+  eq(s.cb.current.stepId, 'flinch');
+  s = act(s, { action: 'attack', target: 'head' });          // lands 3 on the head while it guards its legs
+  ok(!s.cb.current.options.some(o => o.step.when === 'flinch'), 'no second flinch');
+});
+test('Flinch: an ordinary hit below the hard-hit mark does not cause one', () => {
+  const s = act(fight(), { action: 'attack', target: 'left' });  // sword slowed: 1 damage
+  ok(!s.cb.current.options.some(o => o.step.when === 'flinch'), 'no flinch');
+});
+test('Guard: attacking the same spot in 2 of your last 3 exchanges makes it likely to Block there', () => {
+  let s = act(fight(), { action: 'attack', target: 'left' });
+  s = act(s, { action: 'block', target: 'head' });
+  s = act(s, { action: 'attack', target: 'left' });
+  const g = s.cb.current.options.find(o => o.step.when === 'guard');
+  ok(g, 'guard is possible');
+  ok(Math.abs(g.p - ENEMIES.werewolf.guardChance) < 1e-9, 'at its guard chance');
+  eq(g.step.variants[0], { id: 'guard-block-left', second: 'block-left', action: 'block', target: 'left' });
+});
+test('Guard: the barrow knight guards more readily than the werewolf', () => {
+  ok(ENEMIES.barrowKnight.guardChance > ENEMIES.werewolf.guardChance, 'guard chance');
+  eq(C.focusTarget([{ action: 'attack', target: 'legs' }, { action: 'pray', target: null }, { action: 'ability:planB', target: 'legs' }]), 'legs');
+  eq(C.focusTarget([{ action: 'attack', target: 'legs' }, { action: 'attack', target: 'head' }, { action: 'block', target: 'legs' }]), null);
+});
+test('Blocking: the barrow knight blocks far more often than the werewolf', () => {
+  let wolf = 0, knight = 0, wolfN = 0, knightN = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    const rng = createRng(seed);
+    const w = simulateFight({ seed, enemyId: 'werewolf', policy: randomPolicy(rng), clashPick: randomClash(rng) }).stats;
+    const k = simulateFight({ seed, enemyId: 'barrowKnight', policy: randomPolicy(rng), clashPick: randomClash(rng) }).stats;
+    wolf += w.enemyBlocks; wolfN += w.exchanges; knight += k.enemyBlocks; knightN += k.exchanges;
+  }
+  ok(knight / knightN > 2 * (wolf / wolfN), `knight ${(knight / knightN).toFixed(2)}, werewolf ${(wolf / wolfN).toFixed(2)}`);
+  ok(wolf > 0, 'the werewolf blocks now and then');
 });
 
 // --- Repetition counter -----------------------------------------------------------------
@@ -378,7 +516,7 @@ test('Barrow Knight: Block → Legs (main action) stops an attack at the legs', 
   eq(s.cb.current.caption, 'It plants its feet, blade low.');
   eq(act(s, { action: 'attack', target: 'legs' }).cb.enemy.stamina, s.cb.enemy.stamina);
 });
-test('Barrow Knight: the trick (step 4) looks like step 1 but its main swing goes for your legs', () => {
+test('Barrow Knight: the trick (step 4) looks like step 1 but its main swing goes for your legs', () => noHiding(() => {
   let s = act(fight('barrowKnight'), { action: 'block', target: 'head' });  // k1 → k3
   s = act(s, { action: 'pray' });                                          // k3 → k4
   eq(step(s), 'k4');
@@ -387,7 +525,7 @@ test('Barrow Knight: the trick (step 4) looks like step 1 but its main swing goe
   eq(k4.first, k1.first, 'same first clue');
   eq(k4.variants[0].second, k1.variants[0].second, 'same second clue: only counting tells them apart');
   eq(staminaOf(act(s, { action: 'block', target: 'legs' }).c), staminaOf(s.c));
-});
+}));
 
 // --- Fortune and lucky attempts ----------------------------------------------------------
 
@@ -465,18 +603,19 @@ test('Same seed and same choices replay the same fight, feints included', () => 
 // --- Balance (slow: run on a computer with node tests/run-node.js) ---------------------------
 
 for (const enemyId of ['werewolf', 'barrowKnight']) {
-  slowTest(`Balance (${enemyId}): a player who knows the pattern wins about 7 fights in 12; random buttons almost never win`, () => {
+  slowTest(`Balance (${enemyId}): a player who knows the pattern wins about 7 fights in 12; random buttons almost never win; about 1 exchange in 4 or 5 shows no clue`, () => {
     const N = 150;
-    let learned = 0, random = 0, length = 0;
+    let learned = 0, random = 0, length = 0, ex = 0, noClue = 0;
     for (let seed = 1; seed <= N; seed++) {
       const r = simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash });
       if (r.outcome === 'victory') learned++;
-      length += r.exchanges;
+      length += r.exchanges; ex += r.stats.exchanges; noClue += r.stats.noClue;
       const rng = createRng(seed * 7919);
       if (simulateFight({ seed, enemyId, policy: randomPolicy(rng), clashPick: randomClash(rng) }).outcome === 'victory') random++;
     }
     ok(learned / N >= 0.45 && learned / N <= 0.72, `learned wins ${(100 * learned / N).toFixed(0)}% (expect ~58%; full check: node tests/balance.js)`);
     ok(random / N < 0.1, `random wins ${(100 * random / N).toFixed(0)}%`);
     ok(length / N >= 10 && length / N <= 20, `average ${(length / N).toFixed(1)} exchanges`);
+    ok(noClue / ex >= 0.15 && noClue / ex <= 0.3, `no clue in ${(100 * noClue / ex).toFixed(0)}% of exchanges (aim: 1 in 4 or 5)`);
   });
 }

@@ -10,7 +10,7 @@
 
 import {
   startCombat, submitAction, submitClash, availableActions,
-  stepFor, variantOdds, variantTells, withVariant, TARGETS,
+  variantOdds, variantTells, withVariant, focusTarget, TARGETS,
 } from '../engine/combat.js';
 import { getEnemy } from '../data/enemies.js';
 import { createRng } from '../engine/random.js';
@@ -25,15 +25,23 @@ export function practiceFighter(classAbility = 'planB', raceId = 'human') {
 
 const total = (m) => ATTRS.reduce((s, k) => s + m[k], 0);
 
-// The enemy moves still possible given the clues shown, with their chances.
+// The enemy moves still possible given what can be seen, with their chances.
+// Uses only what a player who knows the patterns could work out: which steps
+// were possible this exchange (and how likely), then the caption and clues.
+// When the enemy hides its intent, every move of every possible step remains.
 export function possibleMoves(combat) {
   const enemy = getEnemy(combat.enemyId);
-  const step = stepFor(combat);
-  const odds = variantOdds(enemy, step);
-  const shown = combat.current.tells;
-  const list = step.variants
-    .map((v, i) => ({ v, p: odds[i] }))
-    .filter(({ v }) => variantTells(enemy, step, v).slice(0, shown.length).every((t, j) => t === shown[j]));
+  const cur = combat.current;
+  const list = [];
+  for (const { step, p } of cur.options) {
+    if (!cur.hidden && step.caption !== cur.caption) continue;
+    const odds = variantOdds(enemy, step);
+    step.variants.forEach((v, i) => {
+      if (variantTells(enemy, step, v).slice(0, cur.tells.length).every((t, j) => t === cur.tells[j])) {
+        list.push({ v, p: p * odds[i] });
+      }
+    });
+  }
   const sum = list.reduce((s, x) => s + x.p, 0);
   return list.map(x => ({ v: x.v, p: x.p / sum }));
 }
@@ -122,10 +130,21 @@ export function learnedPolicy(character, combat) {
     if (sameAsLast(combat, ch)) continue;
     let s = 0;
     for (const { v, p } of moves) s += p * evaluate(character, withVariant(combat, v.id), ch, clashGuess);
+    s -= guardRisk(combat, ch);
     if (s > bestScore) { bestScore = s; best = ch; }
   }
   return best || { action: 'pray' };
 }
+// Striking the same spot again invites the enemy to guard it next time:
+// roughly its guard chance times the hit that would be lost.
+function guardRisk(combat, ch) {
+  if (!(ch.action === 'attack' || ch.action === 'ability')) return 0;
+  const name = ch.action === 'ability' ? 'ability:' + ch.abilityId : ch.action;
+  if (!focusTarget([...combat.player.history, { action: name, target: ch.target }])) return 0;
+  const enemy = getEnemy(combat.enemyId);
+  return (enemy.guardChance || 0) * 2 / Math.max(1, total(combat.enemy.stamina));
+}
+
 export const learnedClash = (combat) => guessClash(possibleMoves(combat));
 
 // A player pressing buttons at random.
@@ -148,13 +167,19 @@ export function simulateFight({ seed, policy, clashPick, enemyId = 'werewolf', c
                                timeOfDay = 'Morning', maxExchanges = 200 }) {
   let c = character;
   let cb = startCombat(c, enemyId, { seed, timeOfDay });
+  const stats = { exchanges: 0, noClue: 0, hidden: 0, twoClues: 0, enemyBlocks: 0 };
   while (!cb.outcome && cb.exchange <= maxExchanges) {
+    stats.exchanges++;
+    if (cb.current.tells.length === 0) stats.noClue++;
+    if (cb.current.hidden) stats.hidden++;
+    if (cb.current.tells.length >= 2) stats.twoClues++;
+    if (cb.current.step.variants.find(v => v.id === cb.current.variantId).action === 'block') stats.enemyBlocks++;
     const choice = policy(c, cb);
     ({ character: c, combat: cb } = submitAction(c, cb, choice));
     if (cb.pendingClash) ({ character: c, combat: cb } = submitClash(c, cb, clashPick(cb)));
   }
   const left = ATTRS.reduce((s, k) => s + c.attrs[k].stamina, 0);
-  return { outcome: cb.outcome, exchanges: cb.exchange, staminaLeft: left, character: c, combat: cb };
+  return { outcome: cb.outcome, exchanges: cb.exchange, staminaLeft: left, character: c, combat: cb, stats };
 }
 
 export { createRng };

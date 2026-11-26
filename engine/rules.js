@@ -116,17 +116,28 @@ export function rollFortune(luck, rng, opts) {
 // Clues
 // ---------------------------------------------------------------------------
 
-// 1, +1 per 15 of (WIS + FAI) total, +1 at Luck 10, +1 at Luck 30; at most the
-// step's number of tells; one fewer at Night. `extra` covers traits such as
-// Focused (+1) or Dazed (−1).
+// Clues: 1, +1 per 20 of (WIS + FAI) total, +1 at Luck 20, +1 at Luck 40; at
+// most the step's number of tells; one fewer at Night. `extra` covers traits
+// such as Focused (+1) or Dazed (−1). Every starting character sees one clue;
+// the second clue (the one that exposes a feint) needs high WIS + FAI, high
+// Luck, or a trait like Focused.
+export const CLUE_STEP = 20;
+export const CLUE_LUCK = [20, 40];
 export function cluesShown({ wisTotal, faiTotal, luck, tellCount, night = false, extra = 0 }) {
-  let n = 1 + Math.floor((wisTotal + faiTotal) / 15);
-  if (luck >= 10) n += 1;
-  if (luck >= 30) n += 1;
+  let n = 1 + Math.floor((wisTotal + faiTotal) / CLUE_STEP);
+  for (const t of CLUE_LUCK) if (luck >= t) n += 1;
   n += extra;
   n = Math.min(n, tellCount);
   if (night) n -= 1;
   return Math.max(0, n);
+}
+
+// How often an enemy hides its intent (no clues, a neutral caption). High
+// WIS + FAI and Luck lower it a little: by (WIS + FAI + Luck)%, at most half,
+// so it never reaches zero.
+export function hideChance(base, { wisTotal, faiTotal, luck }) {
+  const cut = Math.min(0.5, (wisTotal + faiTotal + Math.max(0, luck)) / 100);
+  return base * (1 - cut);
 }
 
 // ---------------------------------------------------------------------------

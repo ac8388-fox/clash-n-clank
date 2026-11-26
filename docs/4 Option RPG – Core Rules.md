@@ -10,7 +10,7 @@ The game is a text-first, four-option RPG for mobile (playable on desktop) in a 
 - **One Almighty God.** Lesser spiritual beings exist beneath Him, some loyal and some fallen, in the spirit of C.S. Lewis, Brian Godawa, and Michael Heiser. Miracles are prayers God answers, not spells a character owns.
 - **Giant-kin enemies** (the Nephilim idea) appear under a name still to be created.
 - **Information, not certainty:** attributes and traits improve the clues a player gets, never the correctness of their choice. The single exception is the Prophet's Foretell miracle.
-- **Enemies follow learnable patterns, with feints:** each enemy runs through a pattern of moves in order. At every step it usually makes the step's main move, but sometimes feints: it makes a different move that begins with the same first clue. The second clue gives the feint away, so characters who perceive more clues (higher WIS + FAI, or more Luck) can read feints, and others must guess. Enemies also punish repetition: repeating the same action at the same target two exchanges running draws a counter. Rare titled elites adapt to the player further.
+- **Enemies follow learnable patterns, with feints:** each enemy runs through a pattern of moves in order. At every step it usually makes the step's main move, but sometimes feints: it makes a different move that begins with the same first clue. The second clue gives the feint away, but most characters perceive only the first: reading feints takes high WIS + FAI, high Luck, or a trait like Focused, and others must guess. Some exchanges an enemy hides its intent entirely (no clues and a neutral caption such as "It watches you."); each enemy has its own chance of hiding, which high WIS + FAI and Luck lower a little but never to zero. Enemies also Block: some pattern moves are Blocks with their own clues, an enemy may flinch and Block the spot it was just hit hard, and it Blocks more readily where the player keeps striking. Repeating the same action at the same target two exchanges running draws a counter. Rare titled elites adapt to the player further.
 
 ## Attributes, stamina, and Luck
 
@@ -314,7 +314,7 @@ Combat is simultaneous action with pauses: time stops, the player reads the enem
 
 **The exchange**
 
-1. Time pauses and the player receives clues about the enemy's intent: sight, sound, speech, movement, environment, and habit.
+1. Time pauses and the player receives clues about the enemy's intent: sight, sound, speech, movement, environment, and habit. Some exchanges the enemy gives nothing away.
 2. The player picks an action (Pray, Attack, Block, Item, or an ability) and, for attacks and blocks, a target: Head, Left, Right, or Legs, always from the player's perspective.
 3. Both actions resolve, faster first. A faster attack can stop a slower one only if it carries a trait, such as a Stagger; the slower action takes a disadvantage.
 

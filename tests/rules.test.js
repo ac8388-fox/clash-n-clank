@@ -173,20 +173,34 @@ test('Luck ignores current stamina', () => {
 
 // --- Clues -------------------------------------------------------------------
 
-test('Clues: 1, +1 per 15 of WIS + FAI total', () => {
+test('Clues: 1, +1 per 20 of WIS + FAI total', () => {
   eq(R.cluesShown({ wisTotal: 6, faiTotal: 6, luck: 6, tellCount: 5 }), 1);
-  eq(R.cluesShown({ wisTotal: 8, faiTotal: 7, luck: 6, tellCount: 5 }), 2);
-  eq(R.cluesShown({ wisTotal: 20, faiTotal: 10, luck: 6, tellCount: 5 }), 3);
+  eq(R.cluesShown({ wisTotal: 10, faiTotal: 9, luck: 6, tellCount: 5 }), 1);
+  eq(R.cluesShown({ wisTotal: 12, faiTotal: 8, luck: 6, tellCount: 5 }), 2);
+  eq(R.cluesShown({ wisTotal: 25, faiTotal: 15, luck: 6, tellCount: 5 }), 3);
 });
-test('Clues: +1 at Luck 10 and +1 at Luck 30', () => {
-  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 10, tellCount: 5 }), 2);
-  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 30, tellCount: 5 }), 3);
-  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 9, tellCount: 5 }), 1);
+test('Clues: +1 at Luck 20 and +1 at Luck 40', () => {
+  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 19, tellCount: 5 }), 1);
+  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 20, tellCount: 5 }), 2);
+  eq(R.cluesShown({ wisTotal: 0, faiTotal: 0, luck: 40, tellCount: 5 }), 3);
+});
+test('Clues: every starting race sees one clue as a Level 1 Fighter', () => {
+  for (const race of RACES) {
+    const c = S.createCharacter({ name: 'T', raceId: race.id, luckyNumber: 1, occupationId: 'knight' });
+    const t = R.attrTotals(c);
+    eq(R.cluesShown({ wisTotal: t.WIS, faiTotal: t.FAI, luck: R.luckOf(c), tellCount: 2 }), 1, race.name);
+  }
 });
 test('Clues: at most the step’s number of tells; one fewer at Night', () => {
   eq(R.cluesShown({ wisTotal: 30, faiTotal: 30, luck: 40, tellCount: 2 }), 2);
   eq(R.cluesShown({ wisTotal: 30, faiTotal: 30, luck: 40, tellCount: 2, night: true }), 1);
   eq(R.cluesShown({ wisTotal: 6, faiTotal: 6, luck: 6, tellCount: 2, night: true }), 0);
+});
+test('Hiding: high WIS + FAI and Luck lower an enemy’s chance to hide a little, never to zero', () => {
+  eq(R.hideChance(0.3, { wisTotal: 0, faiTotal: 0, luck: 0 }), 0.3);
+  ok(Math.abs(R.hideChance(0.3, { wisTotal: 6, faiTotal: 6, luck: 8 }) - 0.24) < 1e-9, 'Human Fighter: 20% lower');
+  eq(R.hideChance(0.3, { wisTotal: 60, faiTotal: 60, luck: 90 }), 0.15);
+  ok(R.hideChance(0.3, { wisTotal: 999, faiTotal: 999, luck: 999 }) > 0, 'never zero');
 });
 
 // --- Fortune openings and lucky dice ---------------------------------------

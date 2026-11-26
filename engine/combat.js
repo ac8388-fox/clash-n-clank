@@ -17,6 +17,10 @@
 // running, the enemy's next step is a counter: a fast attack with Advantage,
 // aimed where the player isn't guarding.
 //
+// Blocking: besides Block moves inside its pattern, an enemy may flinch after
+// a hard hit (usually Blocking the spot just hit) or guard a spot the player
+// keeps attacking. Hiding: some exchanges the enemy gives nothing away.
+//
 // Every function returns new objects and never changes what it was given.
 // Randomness (feints, counter aim, Fortune openings, lucky dice, Pray) goes
 // through the seeded generator stored in combat.rngState.
@@ -27,7 +31,7 @@ import { getWeapon, ARMOR, CONSUMABLES } from '../data/items.js';
 import { TRAITS, PRAY_TPTS } from '../data/traits.js';
 import {
   ATTRS, attrTotals, luckOf, cluesShown, rollFortune, rollLuckyDice, luckyResult,
-  computeHit, blockResult, applyDamage, damageCharacter, isDefeated, staminaOf,
+  computeHit, blockResult, applyDamage, damageCharacter, isDefeated, staminaOf, hideChance,
   useAttribute, actionAttribute, isPredictable, tickCooldowns, restoreStamina,
   lowestPool, applyCombatFatigue, wearItem, isBroken,
 } from './rules.js';
@@ -78,10 +82,82 @@ export function counterStep(enemy, repeated) {
   };
 }
 
-// The step the enemy is on this exchange (a pattern step or a counter).
+// A blocking step (kind 'flinch' or 'guard'): the main move Blocks `target`;
+// the feints attack instead.
+export function blockStep(enemy, kind, target) {
+  const t = enemy[kind];
+  return {
+    id: kind,
+    when: kind,
+    first: t.first,
+    caption: t.caption,
+    variants: [
+      { id: `${kind}-block-${target}`, second: 'block-' + target, action: 'block', target },
+      ...t.feints.map((f, i) => ({ id: `${kind}-feint-${i}`, ...f })),
+    ],
+  };
+}
+
+// The spot the player keeps attacking: attacked in at least 2 of their last
+// 3 exchanges (the most recent wins a tie), or null.
+export function focusTarget(history) {
+  const recent = history.slice(-3).filter(h => h.target && (h.action === 'attack' || h.action.startsWith('ability:')));
+  const count = {};
+  let best = null;
+  for (const h of recent) {
+    count[h.target] = (count[h.target] || 0) + 1;
+    if (count[h.target] >= 2) best = h.target;
+  }
+  return best;
+}
+
+// The steps the enemy could take this exchange, with their chances. This is
+// everything a player who knows the patterns could work out; the engine then
+// picks one with the seeded random function.
+export function stepOptions(combat) {
+  const enemy = getEnemy(combat.enemyId);
+  const E = combat.enemy;
+  const h = combat.player.history;
+  const loop = loopSteps(enemy);
+
+  const below = enemy.pattern.find(s => s.when === 'below50');
+  if (below && !E.enrageUsed && sum(E.stamina) < sum(E.totals) / 2) return [{ step: below, p: 1 }];
+  if (h.length >= 2 && isPredictable(h)) return [{ step: counterStep(enemy, h[h.length - 1]), p: 1 }];
+
+  let base = null;
+  if (E.wasBlocked) {
+    const jump = loop.find(s => s.when === 'afterBlocked');
+    if (jump && jump.id !== E.lastStepId) base = jump;
+  }
+  if (!base) base = loop[E.loopIndex];
+  let options = [{ step: base, p: 1 }];
+
+  // After a hard hit it may flinch (never twice running).
+  if (enemy.flinch && E.lastHit && E.lastHit.damage >= enemy.hardHit && E.lastStepId !== 'flinch') {
+    const f = enemy.flinchChance;
+    options = [{ step: blockStep(enemy, 'flinch', E.lastHit.target), p: f }, { step: base, p: 1 - f }];
+  }
+
+  // If the player keeps attacking one spot, it may guard that spot instead.
+  const focus = focusTarget(h);
+  if (focus && enemy.guard) {
+    const g = enemy.guardChance;
+    const guard = blockStep(enemy, 'guard', focus);
+    const out = [];
+    let guardP = 0;
+    for (const o of options) {
+      if (o.step.when === 'flinch') { out.push(o); continue; }
+      guardP += o.p * g;
+      out.push({ step: o.step, p: o.p * (1 - g) });
+    }
+    options = [{ step: guard, p: guardP }, ...out];
+  }
+  return options.filter(o => o.p > 0);
+}
+
+// The step the enemy is on this exchange.
 export function stepFor(combat) {
-  if (combat.current.counter) return combat.current.counter;
-  return getEnemy(combat.enemyId).pattern.find(s => s.id === combat.current.stepId);
+  return combat.current.step;
 }
 
 // The move the enemy committed to this exchange.
@@ -89,7 +165,7 @@ export function moveFor(combat) {
   return stepFor(combat).variants.find(v => v.id === combat.current.variantId);
 }
 
-// How likely each variant of a step is: the main action, then the feints.
+// How likely each variant of a step is: the main move, then the feints.
 export function variantOdds(enemy, step) {
   const n = step.variants.length;
   if (n === 1) return [1];
@@ -102,6 +178,7 @@ export function variantOdds(enemy, step) {
 export function tellText(enemy, id) {
   if (id === 'counter') return COUNTER.first;
   if (id.startsWith('counter-')) return COUNTER.second[id.slice(8)];
+  if (id.startsWith('block-')) return enemy.blockTells[id.slice(6)];
   return enemy.tellText[id];
 }
 
@@ -111,9 +188,13 @@ export function variantTells(enemy, step, variant) {
 }
 
 // For tests and simulations: the same combat with the enemy committed to a
-// particular variant of its current step.
+// particular variant of one of this exchange's possible steps.
 export function withVariant(combat, variantId) {
   const cb = clone(combat);
+  const opt = cb.current.options.find(o => o.step.variants.some(v => v.id === variantId));
+  if (!opt) throw new Error('Not a possible move this exchange: ' + variantId);
+  cb.current.step = opt.step;
+  cb.current.stepId = opt.step.id;
   cb.current.variantId = variantId;
   return cb;
 }
@@ -236,6 +317,7 @@ export function startCombat(character, enemyId, { seed = 1, timeOfDay = 'Morning
       loopIndex: 0,
       lastStepId: null,
       wasBlocked: false,
+      lastHit: null,             // { damage, target } from the player this exchange
       enrageUsed: false,
       enraged: false,
       advantageNext: false,
@@ -254,48 +336,42 @@ export function beginExchange(character, combatIn) {
   const c = clone(character);
   const enemy = getEnemy(combat.enemyId);
   const E = combat.enemy;
-  const P = combat.player;
   const loop = loopSteps(enemy);
   const rng = createRng(combat.rngState);
   combat.exchange += 1;
 
-  // 1. Enemy commits. In order of priority: the once-only below-half step,
-  //    a counter to repetition, the after-Blocked jump, then the loop.
-  let step = null;
-  let counter = null;
-  const below = enemy.pattern.find(s => s.when === 'below50');
-  const h = P.history;
-  if (below && !E.enrageUsed && sum(E.stamina) < sum(E.totals) / 2) {
-    step = below;
-    E.enrageUsed = true;
-  } else if (h.length >= 2 && isPredictable(h)) {
-    counter = counterStep(enemy, h[h.length - 1]);
-    step = counter;
-  } else if (E.wasBlocked) {
-    const jump = loop.find(s => s.when === 'afterBlocked');
-    if (jump && jump.id !== E.lastStepId) {
-      step = jump;
-      E.loopIndex = loop.indexOf(jump);
-    }
-  }
-  if (!step) step = loop[E.loopIndex];
+  // 1. Enemy commits: which step (see stepOptions), then main move or feint.
+  const options = stepOptions(combat);
+  let r = rng.next(), si = 0;
+  while (si < options.length - 1 && r >= options[si].p) { r -= options[si].p; si++; }
+  const step = options[si].step;
+  if (step.when === 'below50') E.enrageUsed = true;
+  const li = loop.findIndex(s => s.id === step.id);
+  if (li >= 0) E.loopIndex = li;
   E.wasBlocked = false;
+  E.lastHit = null;
 
-  // Main action or feint, by the seeded random function.
   const odds = variantOdds(enemy, step);
-  let r = rng.next(), pick = 0;
+  r = rng.next();
+  let pick = 0;
   while (pick < odds.length - 1 && r >= odds[pick]) { r -= odds[pick]; pick++; }
   const variant = step.variants[pick];
 
-  // 2. Clues: the shared first clue, then the variant's second clue.
+  // 2. Clues: maybe nothing at all; otherwise the shared first clue, then the
+  //    variant's second clue if the player perceives it.
   const totals = attrTotals(c);
   const luck = luckOf(c);
+  // An Enraged enemy is wilder and harder to read: it hides 1.5× as often.
+  const hideBase = (enemy.hideChance || 0) * (E.enraged ? 1.5 : 1);
+  const hidden = step.when !== 'below50' &&
+    rng.next() < hideChance(hideBase, { wisTotal: totals.WIS, faiTotal: totals.FAI, luck });
+  const hiddenCaption = hidden ? enemy.hiddenCaptions[Math.floor(rng.next() * enemy.hiddenCaptions.length)] : null;
+
   let extra = 0;
   if (hasTrait(c, 'focused')) extra += 1;
   if (hasTrait(c, 'dazed')) extra -= 1;
-  if (E.enraged) extra -= 1;
   const all = variantTells(enemy, step, variant);
-  const clueCount = cluesShown({
+  const clueCount = hidden ? 0 : cluesShown({
     wisTotal: totals.WIS, faiTotal: totals.FAI, luck,
     tellCount: all.length, night: combat.timeOfDay === 'Night', extra,
   });
@@ -305,9 +381,11 @@ export function beginExchange(character, combatIn) {
 
   combat.current = {
     stepId: step.id,
+    step,
     variantId: variant.id,
-    counter,
-    caption: step.caption,
+    options,
+    hidden,
+    caption: hidden ? hiddenCaption : step.caption,
     tells: all.slice(0, clueCount),
     tellCount: all.length,
     usedFocus: hasTrait(c, 'focused'),
@@ -524,6 +602,8 @@ function resolvePlayer(ctx, o) {
     if (dmg > 0) {
       const r = applyDamage(E.stamina, o.weapon.drains, dmg);
       E.stamina = r.stamina;
+      const landed = r.applied.reduce((n, a) => n + a.amount, 0);
+      E.lastHit = { damage: ((E.lastHit && E.lastHit.damage) || 0) + landed, target: o.target };
       const verb = PLAYER_VERB[o.weapon.id] || 'hits';
       const subject = o.ability ? `${o.ability.name}: your ${o.weapon.name.toLowerCase()}` : `Your ${o.weapon.name.toLowerCase()}`;
       lines.push(`${subject} ${verb} ${ENEMY_PART[o.target]}. ${damageText(r.applied)}`);

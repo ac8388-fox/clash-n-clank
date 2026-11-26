@@ -14,8 +14,11 @@ function run(enemyId, label, make) {
   const avg = lens.reduce((s, n) => s + n, 0) / N;
   const median = lens[Math.floor(N / 2)];
   const mid = `${lens[Math.floor(N * 0.25)]}–${lens[Math.floor(N * 0.75)]}`;
-  console.log(`${enemyId.padEnd(13)} ${label.padEnd(30)} wins ${String(wins).padStart(5)}/${N} (${pct(wins)})  exchanges: avg ${avg.toFixed(1)}, median ${median}, middle half ${mid}`);
-  return { wins: wins / N, avg, median };
+  const st = res.reduce((a, r) => { for (const k in r.stats) a[k] = (a[k] || 0) + r.stats[k]; return a; }, {});
+  const share = (k) => (100 * st[k] / st.exchanges).toFixed(1) + '%';
+  console.log(`${enemyId.padEnd(13)} ${label.padEnd(30)} wins ${String(wins).padStart(5)}/${N} (${pct(wins)})  exchanges: avg ${avg.toFixed(1)}, median ${median}, middle half ${mid}` +
+    `  | no clue ${share('noClue')} (hidden ${share('hidden')}), two clues ${share('twoClues')}, enemy blocks ${share('enemyBlocks')}`);
+  return { wins: wins / N, avg, median, noClue: st.noClue / st.exchanges, enemyBlocks: st.enemyBlocks / st.exchanges };
 }
 
 const out = {};
@@ -29,8 +32,11 @@ for (const enemyId of ['werewolf', 'barrowKnight']) {
     }),
   };
   if (process.argv.includes('--extra')) {
-    run(enemyId, 'learned, Gnome (2 clues)', (seed) =>
-      simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash, character: practiceFighter('planB', 'gnome') }));
+    run(enemyId, 'learned, WIS+FAI 20 (2 clues)', (seed) => {
+      const c = practiceFighter();
+      c.attrs.WIS.natural = 14; c.attrs.WIS.stamina = 14;   // WIS 14 + FAI 6 = 20
+      return simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash, character: c });
+    });
     run(enemyId, 'learned, Human, Night', (seed) =>
       simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash, timeOfDay: 'Night' }));
     run(enemyId, 'learned, Human, Crusher', (seed) =>

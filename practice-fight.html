@@ -36,7 +36,6 @@
   #caption { font-size: 24px; margin: 6px 0; }
   #chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
   .chip { border: 1px solid var(--white); box-shadow: 2px 2px 0 var(--blue); padding: 1px 8px; font-size: 19px; }
-  .chip.none { opacity: .6; border-style: dashed; box-shadow: none; }
   table { width: 100%; border-collapse: collapse; margin: 10px 0 6px; }
   th, td { text-align: center; padding: 1px 2px; font-weight: normal; }
   th { opacity: .8; font-size: 18px; }
@@ -139,6 +138,7 @@
   import { attachHold, attachKeyboard, attachSwipes } from './ui/hold.js';
 
   const SAVE = 'clash-n-clank.practice';
+  const SAVE_VERSION = 3;   // bump when combat rules change; older saves start fresh
   const DIRS = ['up', 'right', 'down', 'left'];
   const TARGET_OF = { up: 'head', left: 'left', right: 'right', down: 'legs' };
   const TARGET_NAME = { head: 'Head', left: 'Left', right: 'Right', legs: 'Legs' };
@@ -151,7 +151,7 @@
     const ability = $('ability').value;
     const character = createCharacter({ name: 'Practice', raceId: 'human', luckyNumber: 2, occupationId: 'knight', classAbility: ability });
     const combat = startCombat(character, 'werewolf', { seed: newSeed() });
-    game = { character, combat, ability, lastLines: [], summary: null };
+    game = { v: SAVE_VERSION, character, combat, ability, lastLines: [], summary: null };
     ui = { page: 0, pending: null, armed: false };
     save();
     render();
@@ -159,7 +159,7 @@
 
   function save() { try { localStorage.setItem(SAVE, JSON.stringify(game)); } catch {} }
   function load() {
-    try { const g = JSON.parse(localStorage.getItem(SAVE)); if (g && g.combat && g.character) return g; } catch {}
+    try { const g = JSON.parse(localStorage.getItem(SAVE)); if (g && g.v === SAVE_VERSION && g.combat && g.character) return g; } catch {}
     return null;
   }
 
@@ -263,12 +263,10 @@
       $('chips').innerHTML = '';
     } else if (clashing) {
       $('caption').textContent = 'CLASH! ' + combat.pendingClash.caption;
-      $('chips').innerHTML = combat.pendingClash.tells.map(t => `<span class="chip">${t}</span>`).join('') || '<span class="chip none">no clues</span>';
+      $('chips').innerHTML = combat.pendingClash.tells.map(t => `<span class="chip">${t}</span>`).join('');
     } else {
       $('caption').textContent = `“${cur.caption}”`;
-      $('chips').innerHTML = cur.tells.length
-        ? cur.tells.map(t => `<span class="chip">${t}</span>`).join('')
-        : '<span class="chip none">no other clues</span>';
+      $('chips').innerHTML = cur.tells.map(t => `<span class="chip">${t}</span>`).join('');
     }
 
     const you = $('row-you').children, foe = $('row-foe').children;
