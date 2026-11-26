@@ -4,13 +4,16 @@
 // bonusAttr: which attribute's total adds (÷5) to damage. Heavy and blunt
 // weapons use STR, finesse and ranged use AGI; other weapons use the
 // attribute they drain (sword STR, dagger AGI).
+//
+// natural: true marks natural weapons (claws, bites, fists, hand wraps).
+// They can Clash but never Clank; only hard weapons Clank.
 
 export const WEAPONS = {
   sword:      { id: 'sword',      name: 'Sword',      reach: 'Approach', speed: 'Fair',  tier: 'Medium', drains: 'STR', hands: 1, traits: ['sharp'],              durability: 20 },
   dagger:     { id: 'dagger',     name: 'Dagger',     reach: 'Close',    speed: 'Swift', tier: 'Light',  drains: 'AGI', hands: 1, traits: ['sharp', 'throwable'], durability: 20 },
   // Enemy weapons
-  claws:      { id: 'claws',      name: 'Claws',      reach: 'Close',    speed: 'Swift', tier: 'Light',  drains: 'AGI', hands: 2, traits: [],                     durability: 20 },
-  bite:       { id: 'bite',       name: 'Bite',       reach: 'Close',    speed: 'Fair',  tier: 'Medium', drains: 'STR', hands: 0, traits: [],                     durability: 20 },
+  claws:      { id: 'claws',      name: 'Claws',      reach: 'Close',    speed: 'Swift', tier: 'Light',  drains: 'AGI', hands: 2, traits: [],                     durability: 20, natural: true },
+  bite:       { id: 'bite',       name: 'Bite',       reach: 'Close',    speed: 'Fair',  tier: 'Medium', drains: 'STR', hands: 0, traits: [],                     durability: 20, natural: true },
   greatsword: { id: 'greatsword', name: 'Greatsword', reach: 'Approach', speed: 'Drawn', tier: 'Heavy',  drains: 'STR', hands: 2, traits: ['sharp', 'heavy'],     durability: 20 },
 };
 

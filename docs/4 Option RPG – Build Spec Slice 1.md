@@ -196,7 +196,7 @@ Each exchange runs the same eight steps, in this order.
 2. **Clues.** Roll whether the enemy hides its intent; if it does, show no clue chips and one of its neutral captions. Otherwise show as many of that step's two tells as the player's clue count allows (first the shared clue, then the one that gives a feint away), as text in the narrative and as chips with a gaze caption above the enemy. Roll for a Fortune opening.
 3. **Player chooses.** Action (Pray, Attack, Block, Item, or an ability from the carousel), then a target (Head, Left, Right, Legs) for attacks and blocks. Tapping the Fortune star, then holding the action, attaches a lucky attempt when an opening is showing.
 4. **Order by speed.** Basic Attacks use the weapon's speed and abilities their listed speed; Hindered and Speed advantage shift one tier. The slower side takes Disadvantage.
-5. **Attacks meet.** At equal speed: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance; the same label (Left vs Left, Head vs Head) starts a Clash; Head vs Legs, or a side vs a height, don't interact.
+5. **Attacks meet.** Two attacks meet when their speeds are equal or one step apart (Swift and Fair, Fair and Drawn); Swift and Drawn never meet. When they meet: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance, but only if both are hard weapons (blades, hafts, gauntlets, shields); if either is a natural weapon (claws, bites, fists, hand wraps) there is no interaction. The same label (Left vs Left, Head vs Head, Legs vs Legs) starts a Clash with any weapons. Head vs Legs, or a side vs a height, don't interact. In the slice the sword (Fair) meets claws (Swift), bites (Fair), and the greatsword (Drawn); the dagger (Swift) meets claws and bites but never the greatsword.
 6. **Clash event**, if triggered. The enemy's Clash direction comes from the move it committed to; the player sees clues and picks a direction. The winner gets Advantage on the next attack, and the loser becomes Off-Balance. No damage is dealt this exchange.
 7. **Resolve.** In speed order: Blocks covering the attacked target stop the hit; anything else deals damage (weapon tier + attribute bonus, then Advantage or Disadvantage, armor, resist or weak, overflow). A hit carrying a Stagger cancels a slower action that hasn't resolved. Apply TPTs, TNTs, and lucky multipliers or penalties.
 8. **Clean up.** Tick cooldowns, clear one-exchange conditions (Off-Balance, Hindered), advance the enemy's pattern, autosave, and check for defeat.
@@ -251,24 +251,24 @@ Stamina, damage, feint, hiding, flinch, and guard chances were tuned by simulati
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| STR / AGI / WIS / FAI | 8 / 8 / 4 / 2 | 9 / 2 / 5 / 0 |
-| Damage bonus | +1 to every hit | +1 to every hit |
-| Feint chance | 45% | 45% |
-| Hides its intent | 25% base (20% against a Human Fighter) | 29% base (23% against a Human Fighter) |
+| STR / AGI / WIS / FAI | 8 / 7 / 4 / 2 | 7 / 2 / 4 / 0 |
+| Damage bonus | +2 to every hit | +2 to every hit |
+| Feint chance | 45% | 48% |
+| Hides its intent | 25% base (20% against a Human Fighter) | 31% base (25% against a Human Fighter) |
 | Neutral captions | “It watches you.” · “It paces, giving nothing away.” | “The knight stands still.” · “Its visor gives nothing away.” |
 | Flinch | 50% after a hit of 3 or more | 50% after a hit of 3 or more (rare: its armor soaks most hits) |
-| Guard | 35% when you keep striking one spot | 60% when you keep striking one spot |
+| Guard | 35% when you keep striking one spot | 65% when you keep striking one spot |
 | Range | Close | Approach |
-| Weapons | Claws (Swift, Light, drains AGI); Bite (Fair, Medium, drains STR) | Greatsword (Drawn, Heavy, drains STR) |
+| Weapons | Claws (Swift, Light, drains AGI); Bite (Fair, Medium, drains STR); both natural: they Clash but never Clank | Greatsword (Drawn, Heavy, drains STR); hard: it can Clank |
 | Armor | None | Heavy head and body, Medium legs |
 | Weak / resist | — | Weak to FAI (×2) |
 | Line | “Grrrhh…” | “Turn back.” |
 
-In simulated play the werewolf Blocks in about 1 exchange in 8 (mostly flinching after a hard hit), and the barrow knight in about 1 in 4.
+In simulated play the werewolf Blocks in about 1 exchange in 8 (mostly flinching after a hard hit), and the barrow knight in about 1 in 4. A player who knows the patterns Clashes about 4 times per fight with either enemy; Clanks happen only against the knight (sword against greatsword), about once in every five fights.
 
 **Enemy patterns** (steps loop in order; a `when` jumps to that step)
 
-Every step has a shared first clue and caption, a **main** move, and one or two **feints**. The enemy makes the main move unless it feints (45% of the time, split evenly between a step's feints). Each move has its own second clue, so a player who perceives two clues can tell the main move from a feint; a starting character sees only the shared clue and must guess. Moves marked **Block** guard that spot: attack somewhere else.
+Every step has a shared first clue and caption, a **main** move, and one or two **feints**. The enemy makes the main move unless it feints (45% of the time for the werewolf, 48% for the knight, split evenly between a step's feints). Each move has its own second clue, so a player who perceives two clues can tell the main move from a feint; a starting character sees only the shared clue and must guess. Moves marked **Block** guard that spot: attack somewhere else.
 
 | Enemy | Step | First clue (shared) | Caption | Main move (second clue) | Feints (second clue) |
 | --- | --- | --- | --- | --- | --- |

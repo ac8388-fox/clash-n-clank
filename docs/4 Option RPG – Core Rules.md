@@ -324,16 +324,18 @@ Combat is simultaneous action with pauses: time stops, the player reads the enem
 
 **Positions:** Close (fists, daggers), Approach (most melee), Ranged (bows, thrown weapons). Each weapon has a reach it suits.
 
-**When attacks meet at equal speed** (player's perspective)
+**When attacks meet** (player's perspective)
+
+Two attacks meet when their speeds are equal or one step apart (Swift and Fair, or Fair and Drawn). Swift and Drawn never meet: both simply resolve by speed.
 
 | Player | Enemy | Result |
 | --- | --- | --- |
-| Left | Right, or Right / Left | Clank: no damage; both gain a fitting TNT |
-| Left | Left, or Right / Right | Clash event |
-| Head | Head, or Legs / Legs | Clash event |
+| Left | Right, or Right / Left | Clank, if both are hard weapons: no damage; both gain a fitting TNT. If either is a natural weapon: no interaction |
+| Left | Left, or Right / Right | Clash event (any weapons) |
+| Head | Head, or Legs / Legs | Clash event (any weapons) |
 | Head | Legs, or a height against a side | No interaction; both resolve by speed |
 
-A Pugilist without gauntlets can't Clank.
+**Only hard weapons Clank.** A Clank is metal meeting metal: blades, hafts, gauntlets, and shields can Clank. Natural weapons (claws, bites, fists, hand wraps) never Clank, so a Pugilist without gauntlets can't Clank. Clashes work with natural weapons too.
 
 **Clash event:** the enemy has already chosen a direction by its pattern. The player gets indirect clues, scaled by WIS, FAI, Luck, traits, and abilities, and picks a direction. A correct pick gives Advantage on the next attack and inflicts an extra TNT; a wrong one hands those to the enemy. Blocks and evades use the same prediction.
 

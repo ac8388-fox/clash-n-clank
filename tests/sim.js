@@ -167,7 +167,7 @@ export function simulateFight({ seed, policy, clashPick, enemyId = 'werewolf', c
                                timeOfDay = 'Morning', maxExchanges = 200 }) {
   let c = character;
   let cb = startCombat(c, enemyId, { seed, timeOfDay });
-  const stats = { exchanges: 0, noClue: 0, hidden: 0, twoClues: 0, enemyBlocks: 0 };
+  const stats = { exchanges: 0, noClue: 0, hidden: 0, twoClues: 0, enemyBlocks: 0, clanks: 0, clashes: 0 };
   while (!cb.outcome && cb.exchange <= maxExchanges) {
     stats.exchanges++;
     if (cb.current.tells.length === 0) stats.noClue++;
@@ -175,7 +175,10 @@ export function simulateFight({ seed, policy, clashPick, enemyId = 'werewolf', c
     if (cb.current.tells.length >= 2) stats.twoClues++;
     if (cb.current.step.variants.find(v => v.id === cb.current.variantId).action === 'block') stats.enemyBlocks++;
     const choice = policy(c, cb);
-    ({ character: c, combat: cb } = submitAction(c, cb, choice));
+    const r = submitAction(c, cb, choice);
+    ({ character: c, combat: cb } = r);
+    if (r.lines.some(l => l.startsWith('Clank!'))) stats.clanks++;
+    if (r.lines.some(l => l.startsWith('CLASH!'))) stats.clashes++;
     if (cb.pendingClash) ({ character: c, combat: cb } = submitClash(c, cb, clashPick(cb)));
   }
   const left = ATTRS.reduce((s, k) => s + c.attrs[k].stamina, 0);

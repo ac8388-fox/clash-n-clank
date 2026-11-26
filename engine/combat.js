@@ -7,7 +7,8 @@
 //                          variant's second clue if the player perceives it
 //   3. Player chooses    – submitAction()
 //   4. Order by speed    – submitAction()
-//   5. Attacks meet      – submitAction()  (Clank, Clash, or no interaction)
+//   5. Attacks meet      – submitAction()  (Clank, Clash, or no interaction;
+//                          speeds equal or one step apart; only hard weapons Clank)
 //   6. Clash event       – submitClash()   (only if step 5 started a Clash)
 //   7. Resolve           – submitAction()
 //   8. Clean up          – cleanup(), then the next exchange begins
@@ -282,13 +283,31 @@ function draughtCount(character) {
   return p ? p.qty : 0;
 }
 
-// What the attack meeting looks like at equal speed (player's perspective):
-// opposite sides Clank; the same label Clashes; anything else doesn't interact.
+// Where two attacks point, from the player's perspective: opposite sides
+// (Left against Right) would Clank; the same label (Left against Left, Head
+// against Head, Legs against Legs) Clashes; anything else doesn't interact.
 export function attacksMeet(playerTarget, enemyTarget) {
   if (playerTarget === enemyTarget) return 'clash';
   const sides = new Set([playerTarget, enemyTarget]);
   if (sides.has('left') && sides.has('right')) return 'clank';
   return 'none';
+}
+
+// Only hard weapons Clank (metal meeting metal: blades, hafts, gauntlets,
+// shields). Natural weapons (claws, bites, fists, hand wraps) never do.
+export function canClank(weapon) {
+  return !!weapon && !weapon.natural;
+}
+
+// Whether two attacks actually meet, and how. Attacks meet when their speeds
+// are equal or one step apart (Swift and Fair, Fair and Drawn); Swift and
+// Drawn never meet. A Clank needs two hard weapons; otherwise it is no
+// interaction. Clashes work with any weapons.
+export function attacksInteract({ playerTarget, enemyTarget, playerSpeed, enemySpeed, playerWeapon, enemyWeapon }) {
+  if (Math.abs(playerSpeed - enemySpeed) > 1) return 'none';
+  const meet = attacksMeet(playerTarget, enemyTarget);
+  if (meet === 'clank' && !(canClank(playerWeapon) && canClank(enemyWeapon))) return 'none';
+  return meet;
 }
 
 // ---------------------------------------------------------------------------
@@ -510,9 +529,12 @@ export function submitAction(characterIn, combatIn, choice) {
 
   const ctx = { c, cb, enemy, step, mv, ability, lines, rng, lucky };
 
-  // --- 5. Attacks meet (equal speed) ----------------------------------------
-  if (isAttack && mv.action === 'attack' && pSpeed === eSpeed) {
-    const meet = attacksMeet(choice.target, mv.target);
+  // --- 5. Attacks meet (equal speed, or one step apart) -----------------------
+  if (isAttack && mv.action === 'attack') {
+    const meet = attacksInteract({
+      playerTarget: choice.target, enemyTarget: mv.target, playerSpeed: pSpeed, enemySpeed: eSpeed,
+      playerWeapon: weapon, enemyWeapon: getWeapon(mv.weapon),
+    });
     if (meet === 'clank') {
       lines.push(`Clank! Your ${weapon.name.toLowerCase()} meets its ${mv.weapon}. You are both Off-Balance.`);
       c.durability = wearItem(c.durability, c.gear.ready[P.weaponIndex]);

@@ -17,8 +17,9 @@ function run(enemyId, label, make) {
   const st = res.reduce((a, r) => { for (const k in r.stats) a[k] = (a[k] || 0) + r.stats[k]; return a; }, {});
   const share = (k) => (100 * st[k] / st.exchanges).toFixed(1) + '%';
   console.log(`${enemyId.padEnd(13)} ${label.padEnd(30)} wins ${String(wins).padStart(5)}/${N} (${pct(wins)})  exchanges: avg ${avg.toFixed(1)}, median ${median}, middle half ${mid}` +
-    `  | no clue ${share('noClue')} (hidden ${share('hidden')}), two clues ${share('twoClues')}, enemy blocks ${share('enemyBlocks')}`);
-  return { wins: wins / N, avg, median, noClue: st.noClue / st.exchanges, enemyBlocks: st.enemyBlocks / st.exchanges };
+    `  | no clue ${share('noClue')} (hidden ${share('hidden')}), two clues ${share('twoClues')}, enemy blocks ${share('enemyBlocks')}` +
+    `  | per fight: Clanks ${(st.clanks / N).toFixed(2)}, Clashes ${(st.clashes / N).toFixed(2)}`);
+  return { wins: wins / N, avg, median, noClue: st.noClue / st.exchanges, enemyBlocks: st.enemyBlocks / st.exchanges, clanks: st.clanks / N, clashes: st.clashes / N };
 }
 
 const out = {};

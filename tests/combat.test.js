@@ -13,6 +13,13 @@ import { practiceFighter, simulateFight, learnedPolicy, learnedClash, randomPoli
 
 const WOLF = ENEMIES.werewolf.attrs;     // { STR: 7, AGI: 7, WIS: 3, FAI: 2 }
 const KNIGHT = ENEMIES.barrowKnight.attrs;
+// Enemy hit damage, worked out from the enemy settings so tuning can't break the tests:
+// weapon tier (Light 1, Medium 2, Heavy 3) + attribute ÷ 5, then the enemy's damage bonus.
+const WB = ENEMIES.werewolf.damageBonus, KB = ENEMIES.barrowKnight.damageBonus;
+const CLAW_BASE = 1 + Math.floor(WOLF.AGI / 5), BITE_BASE = 2 + Math.floor(WOLF.STR / 5), GS_BASE = 3 + Math.floor(KNIGHT.STR / 5);
+const CLAW = CLAW_BASE + WB, BITE = BITE_BASE + WB;
+const adv = (base, bonus) => Math.ceil(base * 1.5) + bonus;     // with Advantage
+const half = (base, bonus) => Math.floor(base / 2) + bonus;     // with Disadvantage
 
 // Pin the enemy to the main move of its normal step (the last option; guard
 // and flinch come first), or to a named variant.
@@ -185,7 +192,7 @@ test('Feints: chosen by the seeded random function (same seed, same choice)', ()
 test('Feints: when it feints left instead of clawing your legs, Block → Legs fails and Block → Left works', () => {
   const s = force(fight(), 'w1-left');
   const legs = act(s, { action: 'block', target: 'legs' });
-  eq(legs.c.attrs.AGI.stamina, 6 - 3);
+  eq(legs.c.attrs.AGI.stamina, 6 - CLAW);
   const left = act(s, { action: 'block', target: 'left' });
   eq(staminaOf(left.c), staminaOf(s.c));
 });
@@ -204,8 +211,8 @@ test('Phone check: when its eyes drop to your legs (main action), Block → Legs
   eq(staminaOf(r.c), staminaOf(s.c));
   ok(r.lines.some(l => l.includes('You block its claws')), 'says blocked');
 });
-test('Not blocking: the claws rake your legs for 3 AGI', () => {
-  eq(act(fight(), { action: 'pray' }).c.attrs.AGI.stamina, 6 - 3);
+test('Not blocking: the claws rake your legs', () => {
+  eq(act(fight(), { action: 'pray' }).c.attrs.AGI.stamina, 6 - CLAW);
 });
 test('After it is Blocked, the werewolf jumps to step 2 (jaws at your throat)', () => {
   const r = act(fight(), { action: 'block', target: 'legs' });
@@ -245,7 +252,7 @@ test('Enraged: its attacks deal 1 more damage (and it hides more often: see Hidi
   const s = fight(); s.cb.enemy.enraged = true;
   s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 0 } }); force(s);
   eq(s.cb.current.tells.length, 1, 'clues are not taken away');
-  eq(act(s, { action: 'pray' }).c.attrs.AGI.stamina, 6 - 4);
+  eq(act(s, { action: 'pray' }).c.attrs.AGI.stamina, 6 - (CLAW + 1));
 }));
 
 // --- Enemy blocks ---------------------------------------------------------------------------
@@ -327,11 +334,11 @@ test('Repetition: the same action and target two exchanges running makes its nex
   eq(s.cb.current.caption, 'It has read your rhythm.');
   eq(s.cb.current.tells, ['It watches your every move']);
 });
-test('Repetition: the counter is a fast attack with Advantage (claws 2 → 3, +1 = 4)', () => {
+test('Repetition: the counter is a fast attack with Advantage', () => {
   let s = act(fight(), { action: 'attack', target: 'left' });
   s = act(s, { action: 'attack', target: 'left' }, 'counter-legs');
   const r = act(s, { action: 'pray' });
-  eq(totalStamina(s.c) - totalStamina(r.c), 4);
+  eq(totalStamina(s.c) - totalStamina(r.c), adv(CLAW_BASE, WB));
   ok(r.lines.some(l => l.includes('claws')), 'uses its fastest weapon');
 });
 test('Repetition: after repeated Blocks, the counter never aims at the guarded target', () => {
@@ -367,7 +374,7 @@ test('Speed: the slower side takes Disadvantage (sword, Fair, vs claws, Swift: 3
 test('Speed: dagger (Swift) vs bite (Fair): the bite is halved', () => {
   const s = holdDagger(act(fight(), { action: 'pray' }));   // w2 main: bite
   const r = act(s, { action: 'attack', target: 'legs' });
-  eq(r.c.attrs.STR.stamina, s.c.attrs.STR.stamina - 2, 'bite 3 halved to 1, +1');
+  eq(r.c.attrs.STR.stamina, s.c.attrs.STR.stamina - half(BITE_BASE, WB), 'bite halved, plus its bonus');
   eq(r.cb.enemy.stamina.AGI, WOLF.AGI - 2, 'dagger 1 + AGI 6 ÷ 5');
 });
 test('Speed: Plan B gives the next action a Speed disadvantage', () => {
@@ -390,25 +397,77 @@ test('Attacks meet: opposite sides Clank, same label Clashes, others don’t int
   eq(C.attacksMeet('head', 'legs'), 'none');
   eq(C.attacksMeet('left', 'head'), 'none');
 });
-test('Clank: neither deals damage and both become Off-Balance', () => {
-  let s = act(fight(), { action: 'pray' }); s = holdDagger(act(s, { action: 'block', target: 'left' }));  // w3 claws right
+// The barrow knight's step 2 (main: Greatsword → Right).
+const atKnightStep2 = () => act(fight('barrowKnight'), { action: 'pray' });
+
+test('Attacks meet at equal speed or one step apart; Swift and Drawn never meet', () => {
+  const base = { playerTarget: 'head', enemyTarget: 'head', playerWeapon: { id: 'sword' }, enemyWeapon: { id: 'greatsword' } };
+  eq(C.attacksInteract({ ...base, playerSpeed: 1, enemySpeed: 1 }), 'clash', 'Fair vs Fair');
+  eq(C.attacksInteract({ ...base, playerSpeed: 2, enemySpeed: 1 }), 'clash', 'Swift vs Fair');
+  eq(C.attacksInteract({ ...base, playerSpeed: 1, enemySpeed: 0 }), 'clash', 'Fair vs Drawn');
+  eq(C.attacksInteract({ ...base, playerSpeed: 2, enemySpeed: 0 }), 'none', 'Swift vs Drawn');
+});
+test('Only hard weapons Clank: claws and bites are natural and never Clank', () => {
+  ok(ENEMIES && !C.canClank({ id: 'claws', natural: true }), 'claws');
+  ok(C.canClank({ id: 'sword' }) && C.canClank({ id: 'greatsword' }), 'blades do');
+  const side = { playerTarget: 'left', enemyTarget: 'right', playerSpeed: 1, enemySpeed: 1 };
+  eq(C.attacksInteract({ ...side, playerWeapon: { id: 'sword' }, enemyWeapon: { id: 'claws', natural: true } }), 'none');
+  eq(C.attacksInteract({ ...side, playerWeapon: { id: 'sword' }, enemyWeapon: { id: 'greatsword' } }), 'clank');
+});
+test('Sword vs claws on opposite sides: no Clank (claws are natural); both hit', () => {
+  let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'block', target: 'left' });   // w3: claws → Right
   const r = act(s, { action: 'attack', target: 'left' });
+  ok(!r.lines.some(l => l.startsWith('Clank!')), 'no Clank');
+  eq(r.cb.enemy.stamina.STR, s.cb.enemy.stamina.STR - 1, 'sword (slower) halved to 1');
+  eq(totalStamina(s.c) - totalStamina(r.c), CLAW, 'claws land');
+  eq(r.cb.player.conditions, [], 'not Off-Balance');
+});
+test('Sword vs greatsword on opposite sides: Clank (Fair and Drawn meet); no damage, both Off-Balance', () => {
+  const s = atKnightStep2();
+  eq(s.cb.current.stepId, 'k2');
+  const r = act(s, { action: 'attack', target: 'left' });
+  ok(r.lines.some(l => l.startsWith('Clank!')), 'Clank');
   eq(staminaOf(r.c), staminaOf(s.c)); eq(r.cb.enemy.stamina, s.cb.enemy.stamina);
   ok(r.cb.player.conditions.some(x => x.id === 'offBalance'), 'player Off-Balance');
-  ok(r.cb.enemy.conditions.some(x => x.id === 'offBalance'), 'enemy Off-Balance');
+  ok(r.cb.enemy.conditions.some(x => x.id === 'offBalance'), 'knight Off-Balance');
+  eq(r.c.durability.sword, 19, 'a Clank wears the sword');
+});
+test('Sword vs bite on the same spot: Clash (natural weapons still Clash)', () => {
+  const head = act(act(fight(), { action: 'pray' }), { action: 'attack', target: 'head' }, null);   // w2: bite → Head
+  ok(head.cb.pendingClash, 'Head against Head');
+  let s = act(act(fight(), { action: 'pray' }), { action: 'block', target: 'left' }, 'w3-legs');  // feint: bite → Legs
+  const r = C.submitAction(s.c, s.cb, { action: 'attack', target: 'legs' });
+  ok(r.combat.pendingClash, 'Legs against Legs');
+});
+test('Sword vs claws on the same spot: Clash (Fair and Swift are one step apart)', () => {
+  const r = C.submitAction(fight().c, fight().cb, { action: 'attack', target: 'legs' });   // w1: claws → Legs
+  ok(r.combat.pendingClash, 'Clash');
+});
+test('Sword vs greatsword on the same spot: Clash', () => {
+  const s = fight('barrowKnight');   // k1: greatsword → Head
+  ok(C.submitAction(s.c, s.cb, { action: 'attack', target: 'head' }).combat.pendingClash, 'Clash');
+});
+test('Dagger vs greatsword: no interaction (Swift and Drawn never meet); both hit', () => {
+  const s = holdDagger(atKnightStep2());
+  const r = act(s, { action: 'attack', target: 'left' });
+  ok(!r.lines.some(l => l.startsWith('Clank!')), 'no Clank');
+  eq(r.cb.enemy.stamina.AGI, s.cb.enemy.stamina.AGI - 1, 'dagger 2, Heavy armor −2, minimum 1');
+  eq(totalStamina(s.c) - totalStamina(r.c), half(GS_BASE, KB), 'greatsword halved (slower), plus its bonus');
+  eq(r.cb.player.conditions, [], 'not Off-Balance');
+  const k1 = holdDagger(fight('barrowKnight'));
+  ok(!C.submitAction(k1.c, k1.cb, { action: 'attack', target: 'head' }).combat.pendingClash, 'no Clash on the same spot either');
 });
 test('Off-Balance: Disadvantage on the next exchange only, then it clears', () => {
-  let s = act(fight(), { action: 'pray' }); s = holdDagger(act(s, { action: 'block', target: 'left' }));
-  s = act(s, { action: 'attack', target: 'left' });     // Clank at w3; now w4 (bite head)
+  const s = act(fight(), { action: 'pray' });             // w2: bite (Fair), sword (Fair)
+  s.cb.player.conditions.push({ id: 'offBalance', until: s.cb.exchange });
   const r = act(s, { action: 'attack', target: 'legs' });
-  eq(r.cb.enemy.stamina.AGI, s.cb.enemy.stamina.AGI - 1, 'dagger 2 halved');
-  eq(r.c.attrs.STR.stamina, s.c.attrs.STR.stamina - 2, 'bite 3 halved to 1, +1');
+  eq(r.cb.enemy.stamina.STR, WOLF.STR - 1, 'sword 3 halved to 1');
   eq(r.cb.player.conditions, [], 'cleared');
 });
 test('No interaction: dagger at Head vs claws at Legs, both hit', () => {
   const r = act(holdDagger(fight()), { action: 'attack', target: 'head' });
   eq(r.cb.enemy.stamina.AGI, WOLF.AGI - 2);
-  eq(r.c.attrs.AGI.stamina, 6 - 3);
+  eq(r.c.attrs.AGI.stamina, 6 - CLAW);
 });
 
 // --- 6. Clash -------------------------------------------------------------------------
@@ -428,10 +487,10 @@ test('Clash won: Advantage on your next attack; the enemy is Off-Balance', () =>
   s = clash(s, 'head');
   ok(s.cb.player.advantageNext, 'Advantage');
   ok(s.cb.enemy.conditions.some(x => x.id === 'offBalance'), 'enemy Off-Balance');
-  // w3: sword (slower, but Advantage) → full 3; claws Off-Balance 2 → 1, +1.
+  // w3: sword (slower, but Advantage) → full 3; claws Off-Balance → halved, plus bonus.
   const r = act(s, { action: 'attack', target: 'left' });
   eq(r.cb.enemy.stamina.STR, WOLF.STR - 3);
-  eq(totalStamina(s.c) - totalStamina(r.c), 2);
+  eq(totalStamina(s.c) - totalStamina(r.c), half(CLAW_BASE, WB));
 });
 test('Clash lost: the enemy gets Advantage and you are Off-Balance', () => {
   let s = act(fight(), { action: 'pray' });
@@ -439,8 +498,8 @@ test('Clash lost: the enemy gets Advantage and you are Off-Balance', () => {
   s = clash(s, 'legs');
   ok(s.cb.enemy.advantageNext, 'enemy Advantage');
   ok(s.cb.player.conditions.some(x => x.id === 'offBalance'), 'player Off-Balance');
-  const r = act(s, { action: 'pray' });  // claws 2 with Advantage → 3, +1
-  eq(totalStamina(s.c) - totalStamina(r.c), 4);
+  const r = act(s, { action: 'pray' });  // claws with Advantage, plus bonus
+  eq(totalStamina(s.c) - totalStamina(r.c), adv(CLAW_BASE, WB));
 });
 
 // --- 7. Resolve --------------------------------------------------------------------------
@@ -449,10 +508,10 @@ test('Block: Off-Balance only halves the damage (rounded up)', () => {
   const s = fight(); s.cb.player.conditions.push({ id: 'offBalance', until: 1 });
   eq(act(s, { action: 'block', target: 'legs' }).c.attrs.AGI.stamina, 6 - 2);
 });
-test('Overflow: claws for 3 into 1 AGI spill 2 into STR', () => {
+test('Overflow: claws into 1 AGI spill the rest into STR', () => {
   const s = fight(); s.c.attrs.AGI.stamina = 1;
   const r = act(s, { action: 'pray' });
-  eq(r.c.attrs.AGI.stamina, 0); eq(r.c.attrs.STR.stamina, 8 - 2);
+  eq(r.c.attrs.AGI.stamina, 0); eq(r.c.attrs.STR.stamina, 8 - (CLAW - 1));
 });
 test('Empty stamina: acting with a pool at 0 lowers its Natural total', () => {
   const s = fight(); s.c.attrs.WIS.stamina = 0;
@@ -470,13 +529,15 @@ test('Pray: Emboldened gives Advantage on the next attack, then is used up', () 
 });
 test('Pray: Blessed makes the next hit 25% lighter', () => {
   const s = fight(); s.c.traits.push({ id: 'blessed', kind: 'TPT' });
-  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 1 } }); force(s);  // bite 4
-  eq(act(s, { action: 'block', target: 'legs' }).c.attrs.STR.stamina, 8 - 3);
+  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 1 } }); force(s);  // bite
+  eq(act(s, { action: 'block', target: 'legs' }).c.attrs.STR.stamina, 8 - Math.floor(BITE * 0.75));
 });
 test('Pray: Steeled ignores the next TNT (Off-Balance from a Clank)', () => {
-  let s = act(fight(), { action: 'pray' }); s = holdDagger(act(s, { action: 'block', target: 'left' }));
+  const s = atKnightStep2();
   s.c.traits = [{ id: 'steeled', kind: 'TPT' }];
-  eq(act(s, { action: 'attack', target: 'left' }).cb.player.conditions, []);
+  const r = act(s, { action: 'attack', target: 'left' });
+  ok(r.lines.some(l => l.startsWith('Clank!')), 'Clank');
+  eq(r.cb.player.conditions, []);
 });
 test('Item: a herbal draught gives +4 to the lowest pool and is used up', () => {
   const s = fight(); s.c.attrs.WIS.stamina = 1;
@@ -558,7 +619,7 @@ test('Lucky attempt success: the hit is multiplied (×2 for one lucky number)', 
 });
 test('Lucky attempt failure: the enemy gets a free attack and you become Off-Balance', () => {
   const { c, r } = findLucky(false);
-  eq(totalStamina(c) - totalStamina(r.character), 6, 'two claw hits of 3');
+  eq(totalStamina(c) - totalStamina(r.character), 2 * CLAW, 'two claw hits');
   ok(r.combat.player.conditions.some(x => x.id === 'offBalance'), 'Off-Balance');
 });
 test('Lucky attempt: does nothing without an opening', () => {
@@ -573,7 +634,7 @@ test('Durability: a Block wears your weapon, a hit wears the armor on that slot,
   eq(act(fight(), { action: 'block', target: 'legs' }).c.durability.sword, 19);
   let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'block', target: 'left' });  // w3 claws right
   eq(act(s, { action: 'pray' }).c.durability.leatherJerkin, 19);
-  eq(act(holdDagger(s), { action: 'attack', target: 'left' }).c.durability.dagger, 19);
+  eq(act(atKnightStep2(), { action: 'attack', target: 'left' }).c.durability.sword, 19, 'Clank');
 });
 test('Victory when all four of its pools reach 0', () => {
   const s = act(fight(), { action: 'pray' });
