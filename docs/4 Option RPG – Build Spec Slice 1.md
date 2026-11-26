@@ -37,7 +37,7 @@ Plain HTML, CSS, and JavaScript with no build step or dependencies, mobile-first
 
 - One `state` object is the single source of truth; screens only read it and call engine functions.
 - Engine functions are pure where possible (state in, state out), so rules can be unit-tested without the UI.
-- The only randomness is in race and occupation offers, Prayer's TPT, Fortune openings, lucky dice, enemy feints (main move or feint at each pattern step), whether an enemy flinches or guards, whether it hides its intent (and which neutral caption it shows), and where an enemy's counter aims. All of it goes through one seeded random function so a run can be replayed.
+- The only randomness is in race and occupation offers, Prayer's TPT, Fortune openings, lucky dice, enemy feints (main move or feint at each pattern step), whether an enemy flinches or guards, whether it hides its intent (and which neutral caption it shows), where an enemy's counter aims, and whether an attack misses by chance. All of it goes through one seeded random function so a run can be replayed.
 - Autosave to local storage after every event and every exchange.
 - A **Display** setting switches between the Text and Graphic versions of every screen.
 
@@ -187,6 +187,9 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Sleep | Evening or Night only: full stamina, clears all TPTs and TNTs, resets everything, wakes in the Morning |
 | Travel | Each journey takes one part of the day |
 | Durability | 20 for every item; −1 per Clank, Block, or hit taken; broken at 0 |
+| Situational misses | An attack always misses when the attacker is Off-Balance, the target is out of reach (a Close weapon against a foe at Approach; in the slice the fighting distance is the enemy's range: werewolf Close, barrow knight Approach), or the target shifted position this exchange with a move at least as fast as the attack (the werewolf's sidestepping feint at step 3) |
+| Miss chance | Attacker's (current AGI stamina + Luck) against the defender's: defender ahead → 3% + 1.2% per point; level → 3%; attacker ahead → 2%; Enraged +8%; never above 20%. Enemies use their own Luck (werewolf 6, barrow knight 6). A successful lucky attempt never misses; Fortune's Favor turns one miss per Rest into a hit |
+| Off-Balance | One exchange: attacks miss, Blocks have Disadvantage |
 
 ## Combat resolution
 
@@ -198,7 +201,7 @@ Each exchange runs the same eight steps, in this order.
 4. **Order by speed.** Basic Attacks use the weapon's speed and abilities their listed speed; Hindered and Speed advantage shift one tier. The slower side takes Disadvantage.
 5. **Attacks meet.** Two attacks meet when their speeds are equal or one step apart (Swift and Fair, Fair and Drawn); Swift and Drawn never meet. When they meet: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance, but only if both are hard weapons (blades, hafts, gauntlets, shields); if either is a natural weapon (claws, bites, fists, hand wraps) there is no interaction. The same label (Left vs Left, Head vs Head, Legs vs Legs) starts a Clash with any weapons. Head vs Legs, or a side vs a height, don't interact. In the slice the sword (Fair) meets claws (Swift), bites (Fair), and the greatsword (Drawn); the dagger (Swift) meets claws and bites but never the greatsword.
 6. **Clash event**, if triggered. The enemy's Clash direction comes from the move it committed to; the player sees clues and picks a direction. The winner gets Advantage on the next attack, and the loser becomes Off-Balance. No damage is dealt this exchange.
-7. **Resolve.** In speed order: Blocks covering the attacked target stop the hit; anything else deals damage (weapon tier + attribute bonus, then Advantage or Disadvantage, armor, resist or weak, overflow). A hit carrying a Stagger cancels a slower action that hasn't resolved. Apply TPTs, TNTs, and lucky multipliers or penalties.
+7. **Resolve.** In speed order: Blocks covering the attacked target stop the hit; then an attack that isn't Blocked can miss (situational misses first, then the miss chance, rolled with the seeded random function; shown as "Your sword swings wide."); anything else deals damage (weapon tier + attribute bonus, then Advantage or Disadvantage, armor, resist or weak, overflow). A hit carrying a Stagger cancels a slower action that hasn't resolved. Apply TPTs, TNTs, and lucky multipliers or penalties.
 8. **Clean up.** Tick cooldowns, clear one-exchange conditions (Off-Balance, Hindered), advance the enemy's pattern, autosave, and check for defeat.
 
 After the fight, apply combat fatigue, durability loss, and rewards, then return to Travel.
@@ -247,16 +250,32 @@ Opening the crypt starts the Barrow Knight fight at once.
 
 **Enemies**
 
-Stamina, damage, feint, hiding, flinch, and guard chances were tuned by simulating 1,200 fights per enemy (`node tests/balance.js`): a Human Fighter with Plan B who has learned the pattern should win about 7 fights in 12, a player pressing random buttons almost never, a fight should last about 10–20 exchanges, and about 1 exchange in 4 or 5 should show no clue at all.
+Stamina, damage, feint, hiding, flinch, and guard chances were tuned by simulating 1,200 fights per enemy (`node tests/balance.js`). **Difficulty targets:** every fight is winnable but tense and costly, and losing is possible. For a Human Fighter with Plan B who has learned the patterns: wins in about 80–90% of fights; about 1 win in 4 is a scrape (under 20% of total stamina left); most wins cost 40–70% of total stamina; flawless wins (under 10% lost) less than 1 in 20; fights last about 10–20 exchanges; about 1 exchange in 4 or 5 shows no clue. A player pressing random buttons should win sometimes (about 15–30%), usually barely.
+
+**Simulated results** (1,200 fights each):
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| STR / AGI / WIS / FAI | 8 / 7 / 4 / 2 | 7 / 2 / 4 / 0 |
-| Damage bonus | +2 to every hit | +2 to every hit |
-| Feint chance | 45% | 48% |
+| Learned player wins | 86% | 79% |
+| Winners usually keep | 38% of total stamina (middle half 19–58%) | 54% (middle half 31–77%) |
+| Scrapes (under 20% left) | 26% of wins | 14% of wins |
+| Wins costing 40–70% | 46% | 55% |
+| Flawless (under 10% lost) | 4% | 5% |
+| Fight length | 10 exchanges (middle half 8–11) | 12 exchanges (middle half 8–14) |
+| Attacks that miss | 23% in all: 4.5% by chance, 18% situational (mostly an Off-Balance enemy after the player wins a Clash) | 19%: 4% by chance, 15% situational |
+| Random buttons win | 0% | 0% |
+
+The random-button target is not met: with these rules a player choosing at random loses almost every fight (random targets, blind Blocks, lost Clashes leaving it Off-Balance, and, against the knight, a dagger that can't reach). Making the enemies weak enough for random play to win 15–30% makes a pattern-reading player win nearly every fight unhurt. This is an open design question.
+
+|  | Werewolf | Barrow Knight |
+| --- | --- | --- |
+| STR / AGI / WIS / FAI | 6 / 6 / 3 / 2 | 5 / 2 / 4 / 0 |
+| Damage bonus | +3 to every hit | +4 to every hit (few, heavy blows) |
+| Feint chance | 47% | 48% |
+| Luck (for misses) | 6 | 6 |
 | Hides its intent | 25% base (20% against a Human Fighter) | 31% base (25% against a Human Fighter) |
 | Neutral captions | “It watches you.” · “It paces, giving nothing away.” | “The knight stands still.” · “Its visor gives nothing away.” |
-| Flinch | 50% after a hit of 3 or more | 50% after a hit of 3 or more (rare: its armor soaks most hits) |
+| Flinch | 50% after a hit of 3 or more | 70% after a hit of 3 or more (rare: its armor soaks most hits) |
 | Guard | 35% when you keep striking one spot | 65% when you keep striking one spot |
 | Range | Close | Approach |
 | Weapons | Claws (Swift, Light, drains AGI); Bite (Fair, Medium, drains STR); both natural: they Clash but never Clank | Greatsword (Drawn, Heavy, drains STR); hard: it can Clank |
@@ -268,13 +287,13 @@ In simulated play the werewolf Blocks in about 1 exchange in 8 (mostly flinching
 
 **Enemy patterns** (steps loop in order; a `when` jumps to that step)
 
-Every step has a shared first clue and caption, a **main** move, and one or two **feints**. The enemy makes the main move unless it feints (45% of the time for the werewolf, 48% for the knight, split evenly between a step's feints). Each move has its own second clue, so a player who perceives two clues can tell the main move from a feint; a starting character sees only the shared clue and must guess. Moves marked **Block** guard that spot: attack somewhere else.
+Every step has a shared first clue and caption, a **main** move, and one or two **feints**. The enemy makes the main move unless it feints (47% of the time for the werewolf, 48% for the knight, split evenly between a step's feints). Each move has its own second clue, so a player who perceives two clues can tell the main move from a feint; a starting character sees only the shared clue and must guess. Moves marked **Block** guard that spot: attack somewhere else.
 
 | Enemy | Step | First clue (shared) | Caption | Main move (second clue) | Feints (second clue) |
 | --- | --- | --- | --- | --- | --- |
 | Werewolf | 1 | Its eyes are on your legs | “Its eyes drop to your legs.” | Claws → Legs (its shoulder drops low) | Claws → Left (a growl from your left) |
 | Werewolf | 2 (after it is Blocked) | Its hackles rise | “Its jaws open toward your throat.” | Bite → Head (its jaws open wide) | Claws → Right (its right paw lifts); **Block → Head** (it ducks its head low) |
-| Werewolf | 3 | It circles to your right | “It circles to your right.” | Claws → Right (its ears flatten) | Bite → Legs (its head dips low); Claws → Left (its weight shifts left) |
+| Werewolf | 3 | It circles to your right | “It circles to your right.” | Claws → Right (its ears flatten) | Bite → Legs (its head dips low); Claws → Left, **sidestepping** (its weight shifts left): an attack no faster than its claws misses |
 | Werewolf | 4 (the trick) | It crouches low | “It crouches, eyes on your legs.” | Bite → Head (its eyes flick up to your throat) | Claws → Legs (its claws dig into the earth) |
 | Werewolf | Below half stamina, once (never hidden) | It throws its head back | “It howls at the moon.” | Becomes Enraged: +1 damage, hides 1.5× as often (its fur bristles) | — |
 | Werewolf | Flinch (after a hard hit) | It flinches from the blow | “It flinches back from the blow.” | **Block → the spot just hit** (head: it tucks its head down; left / right: it curls around its left / right side; legs: it pulls its legs in) | Bite → Head (it snarls and lunges back) |
@@ -361,7 +380,8 @@ Slice 1 is done when a new player can finish the loop on a phone without help, a
 - [ ] Clank, Clash, Block, Pray, Item, Plan B or Crusher, and cooldowns all behave as specified
 - [ ] Overflow follows STR, AGI, WIS, FAI; defeat at all four pools empty
 - [ ] A Fortune opening appears, a lucky attempt rolls the right dice, and both outcomes apply
-- [ ] Learning each enemy's pattern makes the fight noticeably easier on a second try: a player who knows the patterns wins about 7 fights in 12 (55–62% in simulation), random play almost never wins, a fight lasts about 10–20 exchanges, and about 1 exchange in 4 or 5 shows no clue for a starting Human Fighter
+- [ ] Attacks can miss: always when Off-Balance, out of reach, or against a target that shifted first; otherwise by a small chance from AGI stamina + Luck (about 1 in 15, never above 1 in 5; Enraged misses more); a successful lucky attempt never misses; misses show in the result line
+- [ ] Learning each enemy's pattern makes the fight noticeably easier on a second try. Every fight is winnable but tense and costly: a player who knows the patterns wins about 80–90% of fights, about 1 win in 4 is a scrape (under 20% stamina left), most wins cost 40–70% of stamina, flawless wins are rarer than 1 in 20, a fight lasts about 10–20 exchanges, and about 1 exchange in 4 or 5 shows no clue for a starting Human Fighter
 - [ ] Combat fatigue, Rest, and Sleep update stamina and traits correctly
 - [ ] Menu, character sheet, and inventory open from their buttons
 - [ ] The Display setting switches between Text and Graphic versions

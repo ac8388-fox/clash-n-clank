@@ -337,6 +337,13 @@ Two attacks meet when their speeds are equal or one step apart (Swift and Fair, 
 
 **Only hard weapons Clank.** A Clank is metal meeting metal: blades, hafts, gauntlets, and shields can Clank. Natural weapons (claws, bites, fists, hand wraps) never Clank, so a Pugilist without gauntlets can't Clank. Clashes work with natural weapons too.
 
+**Misses:** an attack that isn't Blocked, evaded, Clanked, or Clashed can still miss. It works the same way for the player and for enemies, and every miss shows in the result line ("Your sword swings wide.").
+
+- **Situational misses** (always, no chance involved): attacking while Off-Balance; attacking out of reach (a Close weapon such as a dagger can't reach a foe at Approach); attacking a target that shifted position this exchange before the attack landed (its move was as fast as the attack or faster).
+- **Miss chance:** compare the attacker's current AGI stamina + Luck with the defender's. When the defender's total is higher, the attacker misses 3% of the time plus 1.2% for each point of difference; when they are level, 3%; when the attacker's total is higher, 2%. Enraged attackers add 8%. A miss chance is never more than 20%, so a typical attack misses about 1 time in 15 and never more than about 1 time in 5.
+- A successful lucky attempt never misses. Fortune's Favor (Bard) turns one miss into a hit, once per Rest.
+- Misses roll through the same seeded random function as everything else, so a fight can be replayed.
+
 **Clash event:** the enemy has already chosen a direction by its pattern. The player gets indirect clues, scaled by WIS, FAI, Luck, traits, and abilities, and picks a direction. A correct pick gives Advantage on the next attack and inflicts an extra TNT; a wrong one hands those to the enemy. Blocks and evades use the same prediction.
 
 **Conditions and states**
@@ -346,7 +353,7 @@ Two attacks meet when their speeds are equal or one step apart (Swift and Fair, 
 | Advantage / Disadvantage | Modifier | Better or worse chance of success |
 | Speed advantage / disadvantage | Modifier | Next action counts one tier faster or slower |
 | Hindered | TNT | Next action one speed tier slower |
-| Off-Balance | TNT | Disadvantage on attacks and Blocks; no counters |
+| Off-Balance | TNT | Attacks miss; Disadvantage on Blocks; no counters |
 | Stagger | Instant | Cancels an action in progress; breaks Braced, Guard, and Readied |
 | Braced | State or TPT | Reduced damage; resists movement and Off-Balance; broken by a Stagger |
 | Bedrock | State | Unbreakable Braced (Dwarf) |

@@ -182,7 +182,10 @@ export function simulateFight({ seed, policy, clashPick, enemyId = 'werewolf', c
     if (cb.pendingClash) ({ character: c, combat: cb } = submitClash(c, cb, clashPick(cb)));
   }
   const left = ATTRS.reduce((s, k) => s + c.attrs[k].stamina, 0);
-  return { outcome: cb.outcome, exchanges: cb.exchange, staminaLeft: left, character: c, combat: cb, stats };
+  const start = ATTRS.reduce((s, k) => s + character.attrs[k].stamina, 0);
+  Object.assign(stats, cb.stats);
+  return { outcome: cb.outcome, exchanges: cb.exchange, staminaLeft: left, staminaStart: start,
+           leftShare: left / start, character: c, combat: cb, stats };
 }
 
 export { createRng };

@@ -10,13 +10,18 @@
 //   5. Attacks meet      – submitAction()  (Clank, Clash, or no interaction;
 //                          speeds equal or one step apart; only hard weapons Clank)
 //   6. Clash event       – submitClash()   (only if step 5 started a Clash)
-//   7. Resolve           – submitAction()
+//   7. Resolve           – submitAction()  (Blocks, then misses, then damage)
 //   8. Clean up          – cleanup(), then the next exchange begins
 // After the fight, finishCombat() applies combat fatigue.
 //
 // Repetition: if the player uses the same action and target two exchanges
 // running, the enemy's next step is a counter: a fast attack with Advantage,
 // aimed where the player isn't guarding.
+//
+// Misses: an attack that isn't Blocked, Clanked, or Clashed can still miss.
+// Always when attacking Off-Balance, out of reach, or at a target that
+// shifted position first; otherwise by a small chance (rules.js → missChance).
+// A successful lucky attempt never misses; Fortune's Favor saves one miss.
 //
 // Blocking: besides Block moves inside its pattern, an enemy may flinch after
 // a hard hit (usually Blocking the spot just hit) or guard a spot the player
@@ -34,7 +39,7 @@ import {
   ATTRS, attrTotals, luckOf, cluesShown, rollFortune, rollLuckyDice, luckyResult,
   computeHit, blockResult, applyDamage, damageCharacter, isDefeated, staminaOf, hideChance,
   useAttribute, actionAttribute, isPredictable, tickCooldowns, restoreStamina,
-  lowestPool, applyCombatFatigue, wearItem, isBroken,
+  lowestPool, applyCombatFatigue, wearItem, isBroken, missChance, inReach,
 } from './rules.js';
 import { createRng, pickDistinct } from './random.js';
 
@@ -343,6 +348,7 @@ export function startCombat(character, enemyId, { seed = 1, timeOfDay = 'Morning
     },
     current: null,
     pendingClash: null,
+    stats: { playerAttacks: 0, playerMisses: 0, enemyAttacks: 0, enemyMisses: 0, chanceMisses: 0, situationalMisses: 0 },
     log: [`${enemy.name}: “${enemy.line}”`],
     outcome: null,
   };
@@ -424,7 +430,7 @@ export function availableActions(character, combat) {
     { id: 'block',  name: 'Block',  enabled: true },
     { id: 'item',   name: 'Item',   enabled: draughtCount(character) > 0, detail: `Herbal draught ×${draughtCount(character)}` },
   ];
-  const abilities = character.abilities.map(id => {
+  const abilities = character.abilities.filter(id => !getAbility(id).passive).map(id => {
     const a = getAbility(id);
     const cd = character.cooldowns[id] || 0;
     return { id, name: a.name, enabled: cd === 0 && !!weapon, cooldownLeft: cd, speed: a.speed };
@@ -518,11 +524,11 @@ export function submitAction(characterIn, combatIn, choice) {
     P.advantageNext = false;
     removeTrait(c, 'emboldened');
   }
-  const playerAttackMod = netModifier(playerAdv, playerSlower || hasCondition(P, 'offBalance'));
+  const playerAttackMod = netModifier(playerAdv, playerSlower);
   const playerBlockMod = netModifier(false, hasCondition(P, 'offBalance'));
   let enemyAdv = false;
   if (mv.action === 'attack') { enemyAdv = E.advantageNext || !!mv.advantage; E.advantageNext = false; }
-  const enemyAttackMod = netModifier(enemyAdv, enemySlower || hasCondition(E, 'offBalance'));
+  const enemyAttackMod = netModifier(enemyAdv, enemySlower);
   const enemyBlockMod = netModifier(false, hasCondition(E, 'offBalance'));
 
   P.history.push({ action: action === 'ability' ? 'ability:' + ability.id : action, target: targeted ? choice.target : null });
@@ -573,7 +579,7 @@ export function submitAction(characterIn, combatIn, choice) {
     for (const a of group) {
       if (canceled.has(a.side)) continue;
       if (a.side === 'player' && !playerDown) {
-        resolvePlayer(ctx, { action, weapon, ability, target: choice.target,
+        resolvePlayer(ctx, { action, weapon, ability, target: choice.target, pSpeed, eSpeed,
                              playerAttackMod, enemyBlockMod, enemyOffensive: mv.action === 'attack' });
       }
       if (a.side === 'enemy' && !enemyDown && mv.action === 'enrage') {
@@ -597,6 +603,7 @@ export function submitAction(characterIn, combatIn, choice) {
       enemyAttackMod: null,
       playerBlocking: action === 'block' ? choice.target : null,
       playerBlockMod,
+      free: true,     // the opening it was handed: it can't miss
     });
     playerGainsTNT(ctx.c, cb, 'offBalance', lines);
   }
@@ -616,10 +623,21 @@ function resolvePlayer(ctx, o) {
       armorWeight: enemy.armor[SLOT_FOR[o.target]], resistWeak: damageMultiplier(enemy, o.weapon.drains),
       abilityMultiplier: o.ability && o.ability.multiplier ? o.ability.multiplier : 1, luckyMultiplier: mult,
     });
+    let blocked = false;
     if (mv.action === 'block' && mv.target === o.target) {
       const br = blockResult(dmg, o.enemyBlockMod);
       dmg = br.taken;
+      blocked = true;
       if (dmg === 0) lines.push(`It blocks ${what}.`);
+    }
+    if (dmg > 0 && !blocked) {
+      cb.stats.playerAttacks += 1;
+      const miss = playerMisses(ctx, o);
+      if (miss) {
+        cb.stats.playerMisses += 1;
+        lines.push(miss);
+        dmg = 0;
+      }
     }
     if (dmg > 0) {
       const r = applyDamage(E.stamina, o.weapon.drains, dmg);
@@ -672,6 +690,47 @@ function afterAbility(ctx) {
   }
 }
 
+// Does the player's attack miss? Returns the result line if it does.
+function playerMisses(ctx, o) {
+  const { cb, enemy, mv, lucky } = ctx;
+  if (lucky && lucky.success) return null;                 // a lucky hit never misses
+  const w = o.weapon.name.toLowerCase();
+  let line = null;
+  if (hasCondition(cb.player, 'offBalance')) line = `Off-Balance, your ${w} swings wide.`;
+  else if (!inReach(o.weapon, enemy.range)) line = `Your ${w} can't reach it at ${enemy.range} range.`;
+  else if (mv.shifts && o.eSpeed !== null && o.eSpeed >= o.pSpeed) line = `It sidesteps; your ${w} cuts empty air.`;
+  if (line) cb.stats.situationalMisses += 1;
+  else {
+    const p = missChance({
+      attackerAgi: ctx.c.attrs.AGI.stamina, attackerLuck: luckOf(ctx.c),
+      defenderAgi: cb.enemy.stamina.AGI, defenderLuck: enemy.luck || 0,
+      enraged: hasTrait(ctx.c, 'enraged'),
+    });
+    if (ctx.rng.next() < p) { line = `Your ${w} swings wide.`; cb.stats.chanceMisses += 1; }
+  }
+  if (line && ctx.c.abilities.includes('fortunesFavor') && !ctx.c.favorUsed) {
+    ctx.c.favorUsed = true;
+    ctx.lines.push(`Fortune's Favor! ${line.replace(/\.$/, '')}, but luck guides it home.`);
+    return null;
+  }
+  return line;
+}
+
+// Does the enemy's attack miss? Returns the result line if it does.
+function enemyMisses(ctx, weapon) {
+  const { cb, enemy } = ctx;
+  const w = weapon.name.toLowerCase();
+  if (hasCondition(cb.enemy, 'offBalance')) { cb.stats.situationalMisses += 1; return `Off-Balance, its ${w} miss${w.endsWith('s') ? '' : 'es'} you.`; }
+  if (cb.player.shifted) { cb.stats.situationalMisses += 1; return `You slip aside; its ${w} find${w.endsWith('s') ? '' : 's'} nothing.`; }
+  const p = missChance({
+    attackerAgi: cb.enemy.stamina.AGI, attackerLuck: enemy.luck || 0,
+    defenderAgi: ctx.c.attrs.AGI.stamina, defenderLuck: luckOf(ctx.c),
+    enraged: cb.enemy.enraged,
+  });
+  if (ctx.rng.next() < p) { cb.stats.chanceMisses += 1; return `Its ${w} swing${w.endsWith('s') ? '' : 's'} wide.`; }
+  return null;
+}
+
 // Returns true if the hit carried a Stagger.
 function resolveEnemy(ctx, o) {
   const { cb, enemy, lines } = ctx;
@@ -697,6 +756,14 @@ function resolveEnemy(ctx, o) {
     }
     dmg = br.taken;
     lines.push(`Off-Balance, your Block only softens its ${weapon.name.toLowerCase()}.`);
+  }
+
+  cb.stats.enemyAttacks += 1;
+  const miss = o.free ? null : enemyMisses(ctx, weapon);
+  if (miss) {
+    cb.stats.enemyMisses += 1;
+    lines.push(miss);
+    return false;
   }
 
   if (hasTrait(ctx.c, 'blessed')) {

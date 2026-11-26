@@ -27,6 +27,10 @@
 //            exchanges: with guardChance, it Blocks that spot.
 //   Both have a main Block (second clue names the spot) and an attack feint.
 //
+// luck is the enemy's Luck for the miss chance (engine/rules.js → missChance).
+// shifts: true on a move means the enemy changes position as it acts; an
+// attack at it that isn't faster than that move misses.
+//
 // All randomness uses the seeded random function, so a fight can be replayed.
 // clash is the direction the enemy picks if that variant's attack starts a Clash.
 // art is the picture's file name in assets/house/ and assets/full/.
@@ -38,10 +42,11 @@ export const ENEMIES = {
     art: 'werewolf',
     range: 'Close',
     line: 'Grrrhh…',
-    attrs: { STR: 8, AGI: 7, WIS: 4, FAI: 2 },
-    damageBonus: 2,
-    feintChance: 0.45,
+    attrs: { STR: 6, AGI: 6, WIS: 3, FAI: 2 },
+    damageBonus: 3,
+    feintChance: 0.47,
     hideChance: 0.25,
+    luck: 6,
     hiddenCaptions: ['It watches you.', 'It paces, giving nothing away.'],
     hardHit: 3,
     flinchChance: 0.5,
@@ -105,7 +110,8 @@ export const ENEMIES = {
         variants: [
           { id: 'w3-right', second: 'earsFlatten', action: 'attack', weapon: 'claws', target: 'right', clash: 'right' },
           { id: 'w3-legs', second: 'headDips', action: 'attack', weapon: 'bite', target: 'legs', clash: 'legs' },
-          { id: 'w3-left', second: 'weightLeft', action: 'attack', weapon: 'claws', target: 'left', clash: 'left' },
+          // It sidesteps as it strikes: a slower or equal attack at it misses.
+          { id: 'w3-left', second: 'weightLeft', action: 'attack', weapon: 'claws', target: 'left', clash: 'left', shifts: true },
         ] },
       // The trick: it looks at your legs but bites at your head.
       { id: 'w4', when: 'default', first: 'crouchesLow', caption: 'It crouches, eyes on your legs.',
@@ -131,13 +137,14 @@ export const ENEMIES = {
     art: 'barrow-knight',
     range: 'Approach',
     line: 'Turn back.',
-    attrs: { STR: 7, AGI: 2, WIS: 4, FAI: 0 },
-    damageBonus: 2,
+    attrs: { STR: 5, AGI: 2, WIS: 4, FAI: 0 },
+    damageBonus: 4,
     feintChance: 0.48,
     hideChance: 0.31,
+    luck: 6,
     hiddenCaptions: ['The knight stands still.', 'Its visor gives nothing away.'],
     hardHit: 3,
-    flinchChance: 0.5,
+    flinchChance: 0.7,
     guardChance: 0.65,
     weapons: ['greatsword'],
     armor: { head: 'Heavy', body: 'Heavy', legs: 'Medium' },

@@ -13,6 +13,12 @@ export const ABILITIES = {
     targets: 'any', effect: 'crusher', multiplier: 1.5, upgradesTo: ['punisher'],
     description: 'A stronger attack (+50% damage).',
   },
+  // Bard (Class Abilities → Bard, Level 4). Not used by the slice's Fighter;
+  // the engine supports it so misses can be turned into hits later.
+  fortunesFavor: {
+    id: 'fortunesFavor', name: "Fortune's Favor", passive: true, reset: 'rest',
+    description: 'Once per Rest, turn a miss into a hit.',
+  },
 };
 
 export function getAbility(id) {

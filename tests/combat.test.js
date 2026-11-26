@@ -5,11 +5,24 @@
 // force() (not a feint, a flinch, or a guard), so the rules can be checked
 // exactly; the feint, hiding, and blocking tests pick on purpose.
 
-import { test, slowTest, eq, ok, throws } from './harness.js';
+import { test as baseTest, slowTest, eq, ok, throws } from './harness.js';
 import * as C from '../engine/combat.js';
-import { staminaOf } from '../engine/rules.js';
+import { staminaOf, MISS, missChance, luckOf as luckOfC } from '../engine/rules.js';
+import * as Rules from '../engine/rules.js';
+import * as S from '../engine/state.js';
 import { ENEMIES } from '../data/enemies.js';
 import { practiceFighter, simulateFight, learnedPolicy, learnedClash, randomPolicy, randomClash, createRng } from './sim.js';
+import { summarize } from './balance.js';
+
+// Chance misses are switched off in most tests so damage can be checked
+// exactly (situational misses still apply). missTest runs with them on.
+function noChanceMisses(fn) {
+  const saved = { ...MISS };
+  Object.assign(MISS, { level: 0, perPoint: 0, ahead: 0, enraged: 0 });
+  try { return fn(); } finally { Object.assign(MISS, saved); }
+}
+const test = (name, fn) => baseTest(name, () => noChanceMisses(fn));
+const missTest = baseTest;
 
 const WOLF = ENEMIES.werewolf.attrs;     // { STR: 7, AGI: 7, WIS: 3, FAI: 2 }
 const KNIGHT = ENEMIES.barrowKnight.attrs;
@@ -56,6 +69,8 @@ function clash(s, dir) {
   return force({ c: r.character, cb: r.combat, lines: r.lines });
 }
 const holdDagger = (s) => { s.cb.player.weaponIndex = 1; return s; };
+// Remove any blessings Pray happened to grant, so damage can be checked exactly.
+const plain = (s) => { s.c.traits = s.c.traits.filter(t => t.kind !== 'TPT'); return s; };
 const step = (s) => s.cb.current.stepId;
 const totalStamina = (c) => Object.values(staminaOf(c)).reduce((a, b) => a + b, 0);
 
@@ -235,7 +250,7 @@ test('Phone check: the crouching trick (main action) bites your Head, not your l
   let s = fight();
   for (const m of [{ action: 'pray' }, { action: 'block', target: 'left' }, { action: 'pray' }]) s = act(s, m);
   eq(s.cb.current.caption, 'It crouches, eyes on your legs.');
-  ok(act(s, { action: 'block', target: 'legs' }).c.attrs.STR.stamina < s.c.attrs.STR.stamina, 'blocking legs fails');
+  ok(totalStamina(act(s, { action: 'block', target: 'legs' }).c) < totalStamina(s.c), 'blocking legs fails');
   eq(staminaOf(act(s, { action: 'block', target: 'head' }).c), staminaOf(s.c));
 });
 test('Below half stamina: it howls at the moon, becomes Enraged, once only', () => {
@@ -274,7 +289,7 @@ test('Enemy Block: while it blocks it isn’t attacking, so Pray gives two bless
   eq(act(s, { action: 'pray' }).c.traits.filter(t => t.kind === 'TPT').length, 2);
 });
 test('Enemy Block: when it is Off-Balance its Block only halves your hit', () => {
-  const s = force(act(fight(), { action: 'pray' }), 'w2-guard');
+  const s = plain(force(act(fight(), { action: 'pray' }), 'w2-guard'));
   s.cb.enemy.conditions.push({ id: 'offBalance', until: s.cb.exchange });
   eq(act(s, { action: 'attack', target: 'head' }).cb.enemy.stamina.STR, WOLF.STR - 2, 'sword 3, halved up to 2');
 });
@@ -325,6 +340,96 @@ test('Blocking: the barrow knight blocks far more often than the werewolf', () =
   ok(wolf > 0, 'the werewolf blocks now and then');
 });
 
+// --- Misses ------------------------------------------------------------------------------------
+
+missTest('Miss chance: 3% when level, +1.2% per point the defender is ahead, 2% when the attacker is ahead, never over 20%', () => {
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  ok(near(missChance({ attackerAgi: 6, attackerLuck: 8, defenderAgi: 6, defenderLuck: 8 }), 0.03), 'level');
+  ok(near(missChance({ attackerAgi: 6, attackerLuck: 4, defenderAgi: 6, defenderLuck: 9 }), 0.03 + 0.012 * 5), 'defender 5 ahead');
+  ok(near(missChance({ attackerAgi: 9, attackerLuck: 8, defenderAgi: 2, defenderLuck: 0 }), 0.02), 'attacker ahead');
+  ok(near(missChance({ attackerAgi: 0, attackerLuck: 0, defenderAgi: 30, defenderLuck: 30 }), 0.2), 'capped at 20%');
+});
+missTest('Miss chance: Enraged attackers miss more often (still capped at 20%)', () => {
+  const base = { attackerAgi: 7, attackerLuck: 6, defenderAgi: 6, defenderLuck: 8 };
+  ok(missChance({ ...base, enraged: true }) > missChance(base) + 0.07, 'more likely');
+  ok(missChance({ attackerAgi: 0, defenderAgi: 40, defenderLuck: 20, enraged: true }) <= 0.2, 'cap');
+});
+missTest('Miss chance: stays between 2% and 20% for every starting Fighter against both enemies', () => {
+  for (const race of ['halfling', 'goblin', 'dwarf', 'elf', 'gnome', 'beastborn', 'human', 'dragon', 'ent']) {
+    const c = practiceFighter('planB', race);
+    for (const e of Object.values(ENEMIES)) {
+      for (const [a, d] of [[{ agi: c.attrs.AGI.stamina, luck: null }, { agi: e.attrs.AGI, luck: e.luck }],
+                            [{ agi: e.attrs.AGI, luck: e.luck }, { agi: c.attrs.AGI.stamina, luck: null }]]) {
+        const p = missChance({
+          attackerAgi: a.agi, attackerLuck: a.luck === null ? luckOfC(c) : a.luck,
+          defenderAgi: d.agi, defenderLuck: d.luck === null ? luckOfC(c) : d.luck,
+        });
+        ok(p >= 0.02 && p <= 0.2, `${race} vs ${e.id}: ${p}`);
+      }
+    }
+  }
+});
+missTest('A chance miss shows clearly in the result line, for you and for the enemy', () => {
+  const saved = { ...MISS };
+  Object.assign(MISS, { level: 1, ahead: 1, max: 1 });
+  try {
+    const s = force(act(fight(), { action: 'block', target: 'legs' }));    // w2: bite (Fair) vs sword (Fair)
+    const r = C.submitAction(s.c, s.cb, { action: 'attack', target: 'legs' });
+    ok(r.lines.includes('Your sword swings wide.'), r.lines.join(' | '));
+    ok(r.lines.includes('Its bite swings wide.'), r.lines.join(' | '));
+    eq(r.combat.enemy.stamina, s.cb.enemy.stamina); eq(staminaOf(r.character), staminaOf(s.c));
+    eq(r.combat.stats.playerMisses, 1); eq(r.combat.stats.enemyMisses, 1);
+  } finally { Object.assign(MISS, saved); }
+});
+test('Situational miss: attacking while Off-Balance always misses, for enemies too', () => {
+  const s = plain(act(fight(), { action: 'pray' }));
+  s.cb.enemy.conditions.push({ id: 'offBalance', until: s.cb.exchange });
+  const r = act(s, { action: 'block', target: 'right' });   // its bite (Head) would land
+  eq(staminaOf(r.c), staminaOf(s.c));
+  ok(r.lines.some(l => l.startsWith('Off-Balance, its bite misses')), r.lines.join(' | '));
+});
+test('Situational miss: a dagger can’t reach the barrow knight at Approach range; the sword can', () => {
+  const s = plain(holdDagger(fight('barrowKnight')));
+  const r = act(s, { action: 'attack', target: 'legs' });
+  ok(r.lines.includes("Your dagger can't reach it at Approach range."), r.lines.join(' | '));
+  const sw = act(plain(fight('barrowKnight')), { action: 'attack', target: 'legs' });
+  ok(sw.cb.enemy.stamina.STR < KNIGHT.STR, 'sword reaches');
+});
+test('Situational miss: attacking a target that shifts position first (or at the same time) misses', () => {
+  let s = act(fight(), { action: 'pray' }); s = plain(act(s, { action: 'block', target: 'left' }, 'w3-left'));
+  ok(C.moveFor(s.cb).shifts, 'its feint sidesteps');
+  const sword = act(s, { action: 'attack', target: 'right' });           // Fair, slower than its Swift claws
+  ok(sword.lines.includes('It sidesteps; your sword cuts empty air.'), sword.lines.join(' | '));
+  eq(sword.cb.enemy.stamina, s.cb.enemy.stamina);
+  const dagger = act(holdDagger(JSON.parse(JSON.stringify(s))), { action: 'attack', target: 'head' });   // Swift = Swift
+  eq(dagger.cb.enemy.stamina, s.cb.enemy.stamina, 'same speed: still misses');
+  const h = JSON.parse(JSON.stringify(s)); holdDagger(h);
+  h.cb.enemy.conditions.push({ id: 'hindered', until: h.cb.exchange });  // its claws slowed to Fair
+  ok(act(h, { action: 'attack', target: 'head' }).cb.enemy.stamina.AGI < WOLF.AGI, 'a faster attack lands first');
+});
+test('A successful lucky attempt never misses, even Off-Balance', () => {
+  const { seed, c } = findLucky(true);
+  const cb = C.startCombat(c, 'werewolf', { seed });
+  cb.player.conditions.push({ id: 'offBalance', until: cb.exchange });
+  const r = C.submitAction(c, cb, { action: 'attack', target: 'right', lucky: true });
+  ok(r.lines.some(l => l.startsWith('Lucky!')), 'lucky');
+  ok(r.combat.enemy.stamina.STR < WOLF.STR, 'it hits: ' + r.lines.join(' | '));
+});
+test('Fortune’s Favor turns a miss into a hit once per Rest', () => {
+  const s = plain(act(fight(), { action: 'pray' }));
+  s.c.abilities.push('fortunesFavor');
+  ok(!C.availableActions(s.c, s.cb).abilities.some(a => a.id === 'fortunesFavor'), 'passive: not on the carousel');
+  s.cb.player.conditions.push({ id: 'offBalance', until: s.cb.exchange });
+  const r = act(s, { action: 'attack', target: 'legs' });
+  ok(r.cb.enemy.stamina.STR < WOLF.STR, 'turned into a hit');
+  ok(r.lines.some(l => l.startsWith("Fortune's Favor!")), r.lines.join(' | '));
+  ok(r.c.favorUsed, 'used');
+  r.cb.player.conditions.push({ id: 'offBalance', until: r.cb.exchange });
+  const again = act(r, { action: 'attack', target: 'head' });
+  eq(again.cb.enemy.stamina, r.cb.enemy.stamina, 'only once');
+  eq(Rules.rest(again.c, S.createWorld(1)).character.favorUsed, false, 'Rest resets it');
+});
+
 // --- Repetition counter -----------------------------------------------------------------
 
 test('Repetition: the same action and target two exchanges running makes its next step a counter', () => {
@@ -372,14 +477,14 @@ test('Speed: the slower side takes Disadvantage (sword, Fair, vs claws, Swift: 3
   eq(act(fight(), { action: 'attack', target: 'left' }).cb.enemy.stamina.STR, WOLF.STR - 1);
 });
 test('Speed: dagger (Swift) vs bite (Fair): the bite is halved', () => {
-  const s = holdDagger(act(fight(), { action: 'pray' }));   // w2 main: bite
+  const s = plain(holdDagger(act(fight(), { action: 'pray' })));   // w2 main: bite
   const r = act(s, { action: 'attack', target: 'legs' });
   eq(r.c.attrs.STR.stamina, s.c.attrs.STR.stamina - half(BITE_BASE, WB), 'bite halved, plus its bonus');
   eq(r.cb.enemy.stamina.AGI, WOLF.AGI - 2, 'dagger 1 + AGI 6 ÷ 5');
 });
 test('Speed: Plan B gives the next action a Speed disadvantage', () => {
-  let s = act(fight(), { action: 'pray' });
-  s = act(s, { action: 'ability', abilityId: 'planB', target: 'legs' });
+  let s = plain(act(fight(), { action: 'pray' }));
+  s = plain(act(s, { action: 'ability', abilityId: 'planB', target: 'legs' }));
   ok(s.cb.player.speedPenaltyNext, 'penalty set');
   eq(s.cb.player.weaponIndex, 1, 'switched to the dagger');
   const r = act(s, { action: 'attack', target: 'left' });   // w3 claws: dagger slowed to Fair
@@ -415,7 +520,7 @@ test('Only hard weapons Clank: claws and bites are natural and never Clank', () 
   eq(C.attacksInteract({ ...side, playerWeapon: { id: 'sword' }, enemyWeapon: { id: 'greatsword' } }), 'clank');
 });
 test('Sword vs claws on opposite sides: no Clank (claws are natural); both hit', () => {
-  let s = act(fight(), { action: 'pray' }); s = act(s, { action: 'block', target: 'left' });   // w3: claws → Right
+  let s = act(fight(), { action: 'pray' }); s = plain(act(s, { action: 'block', target: 'left' }));   // w3: claws → Right
   const r = act(s, { action: 'attack', target: 'left' });
   ok(!r.lines.some(l => l.startsWith('Clank!')), 'no Clank');
   eq(r.cb.enemy.stamina.STR, s.cb.enemy.stamina.STR - 1, 'sword (slower) halved to 1');
@@ -447,21 +552,22 @@ test('Sword vs greatsword on the same spot: Clash', () => {
   const s = fight('barrowKnight');   // k1: greatsword → Head
   ok(C.submitAction(s.c, s.cb, { action: 'attack', target: 'head' }).combat.pendingClash, 'Clash');
 });
-test('Dagger vs greatsword: no interaction (Swift and Drawn never meet); both hit', () => {
-  const s = holdDagger(atKnightStep2());
+test('Dagger vs greatsword: no interaction (Swift and Drawn never meet), and the dagger can’t reach it at Approach', () => {
+  const s = plain(holdDagger(atKnightStep2()));
   const r = act(s, { action: 'attack', target: 'left' });
   ok(!r.lines.some(l => l.startsWith('Clank!')), 'no Clank');
-  eq(r.cb.enemy.stamina.AGI, s.cb.enemy.stamina.AGI - 1, 'dagger 2, Heavy armor −2, minimum 1');
-  eq(totalStamina(s.c) - totalStamina(r.c), half(GS_BASE, KB), 'greatsword halved (slower), plus its bonus');
+  ok(r.lines.some(l => l.includes("can't reach it at Approach range")), 'out of reach: ' + r.lines.join(' | '));
+  eq(r.cb.enemy.stamina, s.cb.enemy.stamina, 'the dagger misses');
   eq(r.cb.player.conditions, [], 'not Off-Balance');
   const k1 = holdDagger(fight('barrowKnight'));
   ok(!C.submitAction(k1.c, k1.cb, { action: 'attack', target: 'head' }).combat.pendingClash, 'no Clash on the same spot either');
 });
-test('Off-Balance: Disadvantage on the next exchange only, then it clears', () => {
-  const s = act(fight(), { action: 'pray' });             // w2: bite (Fair), sword (Fair)
+test('Off-Balance: your attacks miss for the next exchange, then it clears', () => {
+  const s = plain(act(fight(), { action: 'pray' }));      // w2: bite
   s.cb.player.conditions.push({ id: 'offBalance', until: s.cb.exchange });
   const r = act(s, { action: 'attack', target: 'legs' });
-  eq(r.cb.enemy.stamina.STR, WOLF.STR - 1, 'sword 3 halved to 1');
+  eq(r.cb.enemy.stamina, s.cb.enemy.stamina, 'the sword misses');
+  ok(r.lines.includes('Off-Balance, your sword swings wide.'), r.lines.join(' | '));
   eq(r.cb.player.conditions, [], 'cleared');
 });
 test('No interaction: dagger at Head vs claws at Legs, both hit', () => {
@@ -487,10 +593,12 @@ test('Clash won: Advantage on your next attack; the enemy is Off-Balance', () =>
   s = clash(s, 'head');
   ok(s.cb.player.advantageNext, 'Advantage');
   ok(s.cb.enemy.conditions.some(x => x.id === 'offBalance'), 'enemy Off-Balance');
-  // w3: sword (slower, but Advantage) → full 3; claws Off-Balance → halved, plus bonus.
+  // w3: sword (slower, but Advantage) → full 3; the Off-Balance werewolf's claws miss.
+  plain(s);
   const r = act(s, { action: 'attack', target: 'left' });
   eq(r.cb.enemy.stamina.STR, WOLF.STR - 3);
-  eq(totalStamina(s.c) - totalStamina(r.c), half(CLAW_BASE, WB));
+  eq(totalStamina(r.c), totalStamina(s.c), 'its claws miss');
+  ok(r.lines.some(l => l.startsWith('Off-Balance, its claws miss')), r.lines.join(' | '));
 });
 test('Clash lost: the enemy gets Advantage and you are Off-Balance', () => {
   let s = act(fight(), { action: 'pray' });
@@ -506,7 +614,7 @@ test('Clash lost: the enemy gets Advantage and you are Off-Balance', () => {
 
 test('Block: Off-Balance only halves the damage (rounded up)', () => {
   const s = fight(); s.cb.player.conditions.push({ id: 'offBalance', until: 1 });
-  eq(act(s, { action: 'block', target: 'legs' }).c.attrs.AGI.stamina, 6 - 2);
+  eq(act(s, { action: 'block', target: 'legs' }).c.attrs.AGI.stamina, 6 - Math.ceil(CLAW / 2));
 });
 test('Overflow: claws into 1 AGI spill the rest into STR', () => {
   const s = fight(); s.c.attrs.AGI.stamina = 1;
@@ -662,21 +770,28 @@ test('Same seed and same choices replay the same fight, feints included', () => 
 });
 
 // --- Balance (slow: run on a computer with node tests/run-node.js) ---------------------------
+// Targets (Build Spec → Enemies): a player who knows the patterns wins most fights
+// (about 80–90%), but wins are costly; flawless wins are rare; fights last
+// 10–20 exchanges; chance misses about 1 in 15; no clue about 1 exchange in 4 or 5.
 
 for (const enemyId of ['werewolf', 'barrowKnight']) {
-  slowTest(`Balance (${enemyId}): a player who knows the pattern wins about 7 fights in 12; random buttons almost never win; about 1 exchange in 4 or 5 shows no clue`, () => {
+  slowTest(`Balance (${enemyId}): wins are likely but costly, flawless wins rare, misses uncommon`, () => {
     const N = 150;
-    let learned = 0, random = 0, length = 0, ex = 0, noClue = 0;
+    const L = [], R = [];
     for (let seed = 1; seed <= N; seed++) {
-      const r = simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash });
-      if (r.outcome === 'victory') learned++;
-      length += r.exchanges; ex += r.stats.exchanges; noClue += r.stats.noClue;
+      L.push(simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash }));
       const rng = createRng(seed * 7919);
-      if (simulateFight({ seed, enemyId, policy: randomPolicy(rng), clashPick: randomClash(rng) }).outcome === 'victory') random++;
+      R.push(simulateFight({ seed, enemyId, policy: randomPolicy(rng), clashPick: randomClash(rng) }));
     }
-    ok(learned / N >= 0.45 && learned / N <= 0.72, `learned wins ${(100 * learned / N).toFixed(0)}% (expect ~58%; full check: node tests/balance.js)`);
-    ok(random / N < 0.1, `random wins ${(100 * random / N).toFixed(0)}%`);
-    ok(length / N >= 10 && length / N <= 20, `average ${(length / N).toFixed(1)} exchanges`);
-    ok(noClue / ex >= 0.15 && noClue / ex <= 0.3, `no clue in ${(100 * noClue / ex).toFixed(0)}% of exchanges (aim: 1 in 4 or 5)`);
+    const l = summarize(L), r = summarize(R);
+    const p = (x) => (100 * x).toFixed(0) + '%';
+    ok(l.winRate >= 0.72 && l.winRate <= 0.95, `learned wins ${p(l.winRate)} (aim 80–90%; full check: node tests/balance.js)`);
+    ok(l.leftMedian <= 0.65, `winners usually keep ${p(l.leftMedian)} (aim: lose 40–70%)`);
+    ok(l.scrape >= 0.08, `scrapes ${p(l.scrape)} of wins`);
+    ok(l.flawless < 0.1, `flawless ${p(l.flawless)} of wins (aim under 5%)`);
+    ok(l.avgLen >= 9 && l.avgLen <= 20, `average ${l.avgLen.toFixed(1)} exchanges`);
+    ok(l.chanceMissRate >= 0.02 && l.chanceMissRate <= 0.1, `chance misses ${p(l.chanceMissRate)} of attacks (aim about 1 in 15)`);
+    ok(l.noClue >= 0.15 && l.noClue <= 0.3, `no clue in ${p(l.noClue)} of exchanges`);
+    ok(r.winRate < l.winRate - 0.5, `learning helps: learned ${p(l.winRate)} vs random ${p(r.winRate)}`);
   });
 }

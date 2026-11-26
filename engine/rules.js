@@ -141,6 +141,32 @@ export function hideChance(base, { wisTotal, faiTotal, luck }) {
 }
 
 // ---------------------------------------------------------------------------
+// Misses
+// ---------------------------------------------------------------------------
+
+// Chance that an attack misses (when it isn't Blocked, Clanked, or Clashed and
+// no situational miss applies). Compare (current AGI stamina + Luck) of the
+// attacker and the defender:
+//   defender ahead: 3% + 1.2% per point of difference
+//   level:          3%
+//   attacker ahead: 2%
+// Enraged attackers add 8%. Never more than 20%.
+export const MISS = { level: 0.03, perPoint: 0.012, ahead: 0.02, enraged: 0.08, max: 0.2 };
+export function missChance({ attackerAgi, attackerLuck = 0, defenderAgi, defenderLuck = 0, enraged = false }) {
+  const diff = (defenderAgi + defenderLuck) - (attackerAgi + attackerLuck);
+  let p = diff > 0 ? MISS.level + MISS.perPoint * diff : diff === 0 ? MISS.level : MISS.ahead;
+  if (enraged) p += MISS.enraged;
+  return Math.min(MISS.max, p);
+}
+
+// Melee reach: a weapon reaches targets up to its own reach (a Close weapon
+// can't reach a foe at Approach; an Approach weapon reaches Close or Approach).
+const REACH_ORDER = { Close: 0, Approach: 1, Ranged: 2 };
+export function inReach(weapon, distance) {
+  return REACH_ORDER[weapon.reach] >= REACH_ORDER[distance];
+}
+
+// ---------------------------------------------------------------------------
 // Damage
 // ---------------------------------------------------------------------------
 
@@ -374,7 +400,7 @@ export function rest(character, world) {
     const def = TRAITS[t.id];
     return !(def && def.clearedBy.includes('rest'));
   });
-  if (!fatigued) c.racialReady = true;
+  if (!fatigued) { c.racialReady = true; c.favorUsed = false; }
   return { character: c, world: advanceTime(world) };
 }
 
@@ -390,6 +416,7 @@ export function sleep(character, world) {
   for (const k of ATTRS) c.attrs[k].stamina = attrTotal(c, k);
   c.traits = c.traits.filter(t => t.kind !== 'TPT' && t.kind !== 'TNT');
   c.racialReady = true;
+  c.favorUsed = false;
   c.cooldowns = {};
   const w = clone(world);
   w.day = (w.day || 1) + 1;
