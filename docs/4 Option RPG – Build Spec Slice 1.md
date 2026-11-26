@@ -202,7 +202,7 @@ Each exchange runs the same eight steps, in this order.
 3. **Player chooses.** Action (Pray, Attack, Block, Item, or an ability from the carousel), then a target (Head, Left, Right, Legs) for attacks and blocks. Tapping the Fortune star, then holding the action, attaches a lucky attempt when an opening is showing.
 4. **Order by speed.** Basic Attacks use the weapon's speed and abilities their listed speed; Hindered and Speed advantage shift one tier. The slower side takes Disadvantage.
 5. **Attacks meet.** Two attacks meet when their speeds are equal or one step apart (Swift and Fair, Fair and Drawn); Swift and Drawn never meet. When they meet: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance, but only if both are hard weapons (blades, hafts, gauntlets, shields); if either is a natural weapon (claws, bites, fists, hand wraps) there is no interaction. The same label (Left vs Left, Head vs Head, Legs vs Legs) starts a Clash with any weapons. Head vs Legs, or a side vs a height, don't interact. In the slice the sword (Fair) meets claws (Swift), bites (Fair), and the greatsword (Drawn); the dagger (Swift) meets claws and bites but never the greatsword.
-6. **Clash event**, if triggered. The enemy's Clash direction usually comes from the move it committed to (its Clash habit: werewolf 90%, barrow knight 78%); otherwise it goes one of the other three ways, by the seeded random function. No clue about the direction unless a tell source gives one (same rule and strengths, e.g. “In the Clash it won't go low, at your legs.”); the player picks a direction. The winner's attack lands with its normal damage (weapon, bonus attribute, Advantage or Disadvantage, armor, resist or weak, lucky multipliers, abilities such as Crusher, and traits such as Blessed), can't be Blocked, and can't miss; the loser's attack does not land. Then the winner gets Advantage on their next attack and the loser becomes Off-Balance. Same for the player and enemies.
+6. **Clash event**, if triggered. The enemy's Clash direction usually comes from the move it committed to (its Clash habit: werewolf 90%, barrow knight 94%); otherwise it goes one of the other three ways, by the seeded random function. No clue about the direction unless a tell source gives one (same rule and strengths, e.g. “In the Clash it won't go low, at your legs.”); the player picks a direction. The winner's attack lands with its normal damage (weapon, bonus attribute, Advantage or Disadvantage, armor, resist or weak, lucky multipliers, abilities such as Crusher, and traits such as Blessed), can't be Blocked, and can't miss; the loser's attack does not land. Then the winner gets Advantage on their next attack and the loser becomes Off-Balance. Same for the player and enemies.
 7. **Resolve.** In speed order: Blocks covering the attacked target stop the hit; then an attack that isn't Blocked can miss (situational misses first, then the miss chance, rolled with the seeded random function; shown as "Your sword swings wide."); anything else deals damage (weapon tier + attribute bonus, then Advantage or Disadvantage, armor, resist or weak, overflow). A hit carrying a Stagger cancels a slower action that hasn't resolved. Apply TPTs, TNTs, and lucky multipliers or penalties.
 8. **Clean up.** Tick cooldowns, clear one-exchange conditions (Off-Balance, Hindered), advance the enemy's pattern, autosave, and check for defeat.
 
@@ -256,47 +256,49 @@ Opening the crypt starts the Barrow Knight fight at once.
 
 Stamina, damage, feint, Clash habit, flinch, and guard chances were tuned by simulating 1,200 fights per enemy (`node tests/balance.js`). **Difficulty targets:** every fight is winnable but tense and costly, and losing is possible. For a Human Fighter with Plan B who has learned the patterns: wins in about 80–90% of fights; about 1 win in 4 is a scrape (under 20% of total stamina left); most wins cost 40–70% of total stamina; flawless wins (under 10% lost) less than 1 in 20; fights last about 10–20 exchanges. A player pressing random buttons should win sometimes (about 15–30%), usually barely.
 
-**Simulated results** (1,200 fights each):
+**Simulated results** (1,200 fights each; `node tests/balance.js 1200`):
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| Learned player wins | 82% | 82% |
-| Winners usually keep | 38% of total stamina (middle half 19–62%) | 58% (middle half 35–77%) |
-| Scrapes (under 20% left) | 26% of wins | 14% of wins |
-| Wins costing 40–70% | 38% | 31% |
-| Flawless (under 10% lost) | 1% | 7% |
-| Fight length | 11 exchanges (middle half 9–13) | 17 exchanges (middle half 11–21) |
-| Clashes per fight (learned) | 3.4, player wins 90% | 5.7, player wins 79% |
-| Tells (learned player) | 5% of exchanges; it prays in 9% and is Focused in 7% | 9% of exchanges; prays in 14%, Focused in 12% |
-| Attacks that miss | 20%: 5% by chance, 15% situational | 23%: 3% by chance, 20% situational |
+| Learned player wins | 82% | 88% |
+| Winners usually keep | 38% of total stamina (middle half 19–62%) | 46% (middle half 27–65%) |
+| Scrapes (under 20% left) | 26% of wins | 19% of wins |
+| Wins costing 40–70% | 38% | 44% |
+| Flawless (under 10% lost) | 1% | 3% |
+| Fight length | 11 exchanges (middle half 9–13) | 19 exchanges (middle half 16–22) |
+| Clashes per fight (learned) | 3.4, player wins 90% | 6.4, player wins 94% |
+| Tells (learned player) | 5% of exchanges; it prays in 9% and is Focused in 7% | 13% of exchanges; prays in 21%, Focused in 22% |
+| Attacks that miss | 20%: 5% by chance, 15% situational | 25%: 4% by chance, 21% situational |
+| Enemy Blocks | about 1 exchange in 8 | about 1 in 6 |
+| Clanks | none (natural weapons) | about 1 in every 14 fights |
 | Random buttons win | 0% | 0% |
 
-Known shortfalls: against the knight, scrapes (14%) are below 1 in 4 and flawless wins (7%) above 1 in 20.
+Known shortfalls: scrapes against the knight are 19% of wins (target about 1 in 4); fewer than half of wins cost 40–70% for either enemy (38% and 44%), so “most wins” is not met; the werewolf's 82% sits at the low edge of 80–90%.
 
-The random-button target is not met: with these rules a player choosing at random loses almost every fight (random targets, blind Blocks, lost Clashes leaving it Off-Balance, and, against the knight, a dagger that can't reach). Making the enemies weak enough for random play to win 15–30% makes a pattern-reading player win nearly every fight unhurt. This is an open design question.
+The random-button target (15–30%) is not met and can't be met by tuning numbers while the learned-player targets hold. A random presser spends about 70% of exchanges on Pray, Item, or a wrong Block while taking hits; even pressing only Attack at random spots wins about 2%, and a player who knows the rules but not the patterns wins about 1%. Weakening the werewolf until random play wins 12% made learned play win 100% with 26% flawless in about 7 exchanges; at 45% random wins, learned play was 36% flawless. Rule changes meant to help a random player more than a skilled one (a wrong-spot Block halving the hit, Pray also healing 2, no Off-Balance after a lost Clash) each left random wins near 0%. This needs a design decision: a lower target for random play, or a different measure (for example, a first-time player who hasn't learned the patterns).
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| STR / AGI / WIS / FAI | 9 / 9 / 3 / 2 | 11 / 3 / 4 / 0 |
+| STR / AGI / WIS / FAI | 9 / 9 / 3 / 2 | 11 / 3 / 6 / 6 |
 | Damage bonus | +2 to every hit | +1 to every hit |
-| Clash habit (goes its pattern's Clash direction) | 90% | 78% |
-| Feint chance | 47% | 48% |
+| Clash habit (goes its pattern's Clash direction) | 90% | 94% |
+| Feint chance | 47% | 59% |
 | Luck (for misses) | 6 | 6 |
-| WIS + FAI (for tells) | 3 + 2 = 5 | 4 + 0 = 4 |
+| WIS + FAI (for tells) | 3 + 2 = 5 | 6 + 6 = 12 |
 | Neutral captions | “The werewolf paces, watching you.” · “It circles, low and silent.” · “Its breath steams in the cold air.” · “It sways, claws flexing.” | “The knight stands still, blade ready.” · “Its visor gives nothing away.” · “Old armor creaks as it shifts its weight.” · “Dust drifts down around it.” |
-| Flinch | 50% after a hit of 3 or more | 35% after a hit of 3 or more (rare: its armor soaks most hits) |
-| Guard | 35% when you keep striking one spot | 40% when you keep striking one spot |
+| Flinch | 50% after a hit of 3 or more | 30% after a hit of 3 or more (rare: its armor soaks most hits) |
+| Guard | 35% when you keep striking one spot | 20% when you keep striking one spot |
 | Range | Close | Approach |
 | Weapons | Claws (Swift, Light, drains AGI); Bite (Fair, Medium, drains STR); both natural: they Clash but never Clank | Greatsword (Drawn, Heavy, drains STR); hard: it can Clank |
 | Armor | None | Heavy head and body, Medium legs |
 | Weak / resist | — | Weak to FAI (×2) |
 | Line | “Grrrhh…” | “Turn back.” |
 
-In simulated play the werewolf Blocks in about 1 exchange in 8 (mostly flinching after a hard hit), and the barrow knight in about 1 in 4. A player who knows the patterns Clashes about 4 times per fight with either enemy; Clanks happen only against the knight (sword against greatsword), about once in every five fights.
+In simulated play the werewolf Blocks in about 1 exchange in 8 (mostly flinching after a hard hit), and the barrow knight in about 1 in 6. A player who knows the patterns Clashes about 3 times per fight with the werewolf and 6 with the knight; Clanks happen only against the knight (sword against greatsword), about once in every 14 fights.
 
 **Enemy patterns** (steps loop in order; a `when` jumps to that step)
 
-Every step has a **main** move and one or two **feints**. The enemy makes the main move unless it feints (47% of the time for the werewolf, 48% for the knight, split evenly between a step's feints). Nothing on screen gives the move away: a player relies on knowing the pattern, plus any tell a source gives (“It's avoiding your legs” at werewolf step 1 means the feint, Claws → Left). Moves marked **Block** guard that spot: attack somewhere else.
+Every step has a **main** move and one or two **feints**. The enemy makes the main move unless it feints (47% of the time for the werewolf, 59% for the knight, split evenly between a step's feints). Nothing on screen gives the move away: a player relies on knowing the pattern, plus any tell a source gives (“It's avoiding your legs” at werewolf step 1 means the feint, Claws → Left). Moves marked **Block** guard that spot: attack somewhere else.
 
 | Enemy | Step | Main move | Feints |
 | --- | --- | --- | --- |
@@ -307,9 +309,9 @@ Every step has a **main** move and one or two **feints**. The enemy makes the ma
 | Werewolf | Below half stamina, once | Becomes Enraged: +1 damage, harder to read | — |
 | Werewolf | Flinch (after a hard hit) | **Block → the spot just hit** | Bite → Head |
 | Werewolf | Guard (you keep striking one spot) | **Block → that spot** | Claws → Legs |
-| Barrow Knight | 1 | Greatsword → Head | Greatsword → Left; **Block → Head** |
-| Barrow Knight | 2 | Greatsword → Right | Greatsword → Legs; **Block → Right** |
-| Barrow Knight | 3 (after it is Blocked) | **Block → Legs** | Greatsword → Legs |
+| Barrow Knight | 1 | Greatsword → Head | Greatsword → Left |
+| Barrow Knight | 2 | Greatsword → Right | Greatsword → Legs |
+| Barrow Knight | 3 (after it is Blocked) | Greatsword → Legs (it strikes back low) | **Block → Legs** |
 | Barrow Knight | 4 (the trick) | Greatsword → Legs | Greatsword → Head |
 | Barrow Knight | Flinch (after a hard hit) | **Block → the spot just hit** | Greatsword → Head |
 | Barrow Knight | Guard (you keep striking one spot) | **Block → that spot** | Greatsword → Head |

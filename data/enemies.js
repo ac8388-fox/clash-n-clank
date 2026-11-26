@@ -100,11 +100,11 @@ export const ENEMIES = {
     art: 'barrow-knight',
     range: 'Approach',
     line: 'Turn back.',
-    attrs: { STR: 11, AGI: 3, WIS: 4, FAI: 0 },
+    attrs: { STR: 11, AGI: 3, WIS: 6, FAI: 6 },
     damageBonus: 1,
-    feintChance: 0.48,
+    feintChance: 0.59,
     luck: 6,
-    clashHabit: 0.78,
+    clashHabit: 0.94,
     neutralCaptions: [
       'The knight stands still, blade ready.',
       'Its visor gives nothing away.',
@@ -112,8 +112,8 @@ export const ENEMIES = {
       'Dust drifts down around it.',
     ],
     hardHit: 3,
-    flinchChance: 0.35,
-    guardChance: 0.4,
+    flinchChance: 0.3,
+    guardChance: 0.2,
     weapons: ['greatsword'],
     armor: { head: 'Heavy', body: 'Heavy', legs: 'Medium' },
     resist: {},
@@ -124,16 +124,15 @@ export const ENEMIES = {
       { id: 'k1', when: 'default', variants: [
         { id: 'k1-head', action: 'attack', weapon: 'greatsword', target: 'head', clash: 'head' },
         { id: 'k1-left', action: 'attack', weapon: 'greatsword', target: 'left', clash: 'left' },
-        { id: 'k1-guard', action: 'block', target: 'head' },
       ] },
       { id: 'k2', when: 'default', variants: [
         { id: 'k2-right', action: 'attack', weapon: 'greatsword', target: 'right', clash: 'left' },
         { id: 'k2-legs', action: 'attack', weapon: 'greatsword', target: 'legs', clash: 'legs' },
-        { id: 'k2-guard', action: 'block', target: 'right' },
       ] },
+      // After it is Blocked it strikes back low (or, as its feint, guards its legs).
       { id: 'k3', when: 'afterBlocked', variants: [
-        { id: 'k3-block', action: 'block', target: 'legs' },
         { id: 'k3-legs', action: 'attack', weapon: 'greatsword', target: 'legs', clash: 'legs' },
+        { id: 'k3-block', action: 'block', target: 'legs' },
       ] },
       // The trick: every fourth swing goes for your legs, where step 1 goes for your head.
       { id: 'k4', when: 'default', variants: [

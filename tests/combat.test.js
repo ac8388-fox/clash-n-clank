@@ -158,7 +158,9 @@ test('Tells: only an exact source names the move', () => tellsAlways(() => withS
     eq(t.exact, { action: mv.action, target: mv.target || null });
     seen.add(t.text);
   }
-  ok([...seen].some(x => x.startsWith("It's going for ")) && [...seen].some(x => x.startsWith('It will guard ')), [...seen].join(' / '));
+  ok([...seen].some(x => x.startsWith("It's going for ")), [...seen].join(' / '));
+  // A Block (the knight guarding its legs after it is Blocked) is named too.
+  eq(C.moveTell(3, { action: 'block', target: 'legs' }, createRng(1)).text, 'It will guard its legs instead of striking.');
 })));
 test('Tells: the strongest source a fighter has is the one used', () => withSource('narrow', () => {
   const c = focusedFighter();
@@ -388,12 +390,12 @@ test('Guard: attacking the same spot in 2 of your last 3 exchanges makes it like
   ok(Math.abs(g.p - ENEMIES.werewolf.guardChance) < 1e-9, 'at its guard chance');
   eq(g.step.variants[0], { id: 'guard-block-left', action: 'block', target: 'left' });
 });
-test('Guard: the barrow knight guards more readily than the werewolf', () => {
-  ok(ENEMIES.barrowKnight.guardChance > ENEMIES.werewolf.guardChance, 'guard chance');
+test('Guard: both enemies guard a spot you keep striking', () => {
+  ok(ENEMIES.barrowKnight.guardChance > 0 && ENEMIES.werewolf.guardChance > 0, 'guard chance');
   eq(C.focusTarget([{ action: 'attack', target: 'legs' }, { action: 'pray', target: null }, { action: 'ability:planB', target: 'legs' }]), 'legs');
   eq(C.focusTarget([{ action: 'attack', target: 'legs' }, { action: 'attack', target: 'head' }, { action: 'block', target: 'legs' }]), null);
 });
-test('Blocking: the barrow knight blocks far more often than the werewolf', () => {
+test('Blocking: the barrow knight blocks more often than the werewolf', () => {
   let wolf = 0, knight = 0, wolfN = 0, knightN = 0;
   for (let seed = 1; seed <= 60; seed++) {
     const rng = createRng(seed);
@@ -401,7 +403,7 @@ test('Blocking: the barrow knight blocks far more often than the werewolf', () =
     const k = simulateFight({ seed, enemyId: 'barrowKnight', policy: randomPolicy(rng), clashPick: randomClash(rng) }).stats;
     wolf += w.enemyBlocks; wolfN += w.exchanges; knight += k.enemyBlocks; knightN += k.exchanges;
   }
-  ok(knight / knightN > 2 * (wolf / wolfN), `knight ${(knight / knightN).toFixed(2)}, werewolf ${(wolf / wolfN).toFixed(2)}`);
+  ok(knight / knightN > 1.2 * (wolf / wolfN), `knight ${(knight / knightN).toFixed(2)}, werewolf ${(wolf / wolfN).toFixed(2)}`);
   ok(wolf > 0, 'the werewolf blocks now and then');
 });
 
@@ -894,15 +896,15 @@ for (const enemyId of ['werewolf', 'barrowKnight']) {
     const l = summarize(L), r = summarize(R);
     const p = (x) => (100 * x).toFixed(0) + '%';
     ok(l.winRate >= 0.72 && l.winRate <= 0.95, `learned wins ${p(l.winRate)} (aim 80–90%; full check: node tests/balance.js)`);
-    ok(l.leftMedian <= 0.75, `winners usually keep ${p(l.leftMedian)} (aim: lose 40–70%; a known shortfall against the knight)`);
-    // Known shortfalls (Build Spec → Enemies): scrapes are below the 1-in-4 aim and
-    // flawless wins above 1 in 20, mostly against the knight. These limits guard
-    // against getting worse.
-    ok(l.scrape >= 0.03, `scrapes ${p(l.scrape)} of wins (aim about 25%)`);
-    ok(l.flawless < 0.14, `flawless ${p(l.flawless)} of wins (aim under 5%)`);
+    ok(l.leftMedian <= 0.65, `winners usually keep ${p(l.leftMedian)} (aim: lose 40–70%)`);
+    // Scrapes: about 1 win in 4 against the werewolf, about 1 in 5 against the knight
+    // (Build Spec → Enemies). These limits leave room for the noise of 150 fights.
+    ok(l.scrape >= 0.1, `scrapes ${p(l.scrape)} of wins (aim about 25%)`);
+    ok(l.flawless < 0.08, `flawless ${p(l.flawless)} of wins (aim under 5%)`);
     ok(l.avgLen >= 9 && l.avgLen <= 20, `average ${l.avgLen.toFixed(1)} exchanges`);
     ok(l.chanceMissRate >= 0.02 && l.chanceMissRate <= 0.1, `chance misses ${p(l.chanceMissRate)} of attacks (aim about 1 in 15)`);
     ok(l.tellRate > 0 && l.tellRate <= l.focusedRate, `tells in ${p(l.tellRate)} of exchanges, only while Focused (${p(l.focusedRate)})`);
+    // Random buttons win almost never (aim 15–30%: a known shortfall, Build Spec → Enemies).
     ok(r.winRate < l.winRate - 0.5, `learning helps: learned ${p(l.winRate)} vs random ${p(r.winRate)}`);
   });
 }
