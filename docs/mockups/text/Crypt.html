@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trial – the sealed crypt</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#fff}a:hover{color:#9DB4FF}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; box-sizing: border-box; background: #000000; color: #FFFFFF; font-family: 'VT323', 'Courier New', monospace">
+
+  <div style="position: absolute; top: 16px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 52px; z-index: 2">
+    <button aria-label="Compass, facing north. Open map" style="width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; color: #FFFFFF; line-height: 1; cursor: pointer">
+      <svg width="14" height="8" viewBox="0 0 14 8" aria-hidden="true" fill="#FFFFFF"><path d="M7 0 L14 8 L0 8 Z"></path></svg>
+      <span style="font-size: 30px">{{facing}}</span>
+    </button>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; flex-grow: 1">
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">STR</span><span style="font-size: 22px">46/46</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">AGI</span><span style="font-size: 22px">24/24</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">WIS</span><span style="font-size: 22px">12/12</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">FAI</span><span style="font-size: 22px">8/8</span></div>
+    </div>
+    <button aria-label="Menu" style="width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+      <svg width="26" height="22" viewBox="0 0 26 22" aria-hidden="true" stroke="#FFFFFF" stroke-width="3"><path d="M2 3 H24 M2 11 H24 M2 19 H24"></path></svg>
+    </button>
+  </div>
+  <div style="position: absolute; top: 176px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: baseline; z-index: 2">
+    <span style="font-size: 28px">SEALED CRYPT</span><span style="font-size: 20px; color: #BDBDBD">FACING {{facingWord}}</span>
+  </div>
+  <div style="position: absolute; top: 214px; left: 16px; right: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 24px; line-height: 1.15">
+    <p style="margin: 0">Worn steps descend to an iron-bound door, chained and padlocked. A carved cross sits inside a ring of old runes.</p>
+  </div>
+  <p style="position: absolute; top: 396px; left: 112px; right: 112px; height: 84px; margin: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 24px; line-height: 1; color: #BDBDBD">What do you do?</p>
+  <div style="position: absolute; top: 500px; left: 16px; right: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 24px; line-height: 1.15">
+    <p style="margin: 0">The torches gutter, though there is no wind.</p>
+  </div>
+  <button style="position: absolute; top: 80px; left: 139px; width: 112px; height: 84px; font-size: 18px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">PRAY OVER THE SEAL<span style="font-size: 15px; color: #BDBDBD">FAITH</span></button>
+  <button style="position: absolute; top: 396px; left: 0; width: 112px; height: 84px; font-size: 20px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">PICK THE LOCK<span style="font-size: 15px; color: #BDBDBD">AGILITY</span></button>
+  <button style="position: absolute; top: 396px; right: 0; width: 112px; height: 84px; font-size: 20px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">FORCE THE DOOR<span style="font-size: 15px; color: #BDBDBD">STRENGTH</span></button>
+  <button style="position: absolute; bottom: 48px; left: 139px; width: 112px; height: 84px; font-size: 20px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">READ THE RUNES<span style="font-size: 15px; color: #BDBDBD">WISDOM</span></button>
+  <p style="position: absolute; bottom: 30px; left: 72px; right: 72px; margin: 0; text-align: center; font-size: 16px; color: #BDBDBD; z-index: 2">tap the compass for the map</p>
+  <button aria-label="Character" style="position: absolute; bottom: 16px; left: 16px; width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; z-index: 3"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke-width="2.5"><path transform="translate(1.5 1.5)" stroke="{{glow}}" d="M16 4 A6 6 0 1 1 15.9 4 Z M6 29 C6 20 26 20 26 29 Z"></path><path stroke="#FFFFFF" d="M16 4 A6 6 0 1 1 15.9 4 Z M6 29 C6 20 26 20 26 29 Z"></path></svg></button>
+  <button aria-label="Inventory" style="position: absolute; bottom: 16px; right: 16px; width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; z-index: 3"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke-width="2.5"><path transform="translate(1.5 1.5)" stroke="{{glow}}" d="M8 10 H24 V28 H8 Z M12 10 V7 C12 3 20 3 20 7 V10 M8 18 H24 M14 18 V22 H18 V18"></path><path stroke="#FFFFFF" d="M8 10 H24 V28 H8 Z M12 10 V7 C12 3 20 3 20 7 V10 M8 18 H24 M14 18 V22 H18 V18"></path></svg></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"glow":{"editor":"color","default":"#5BC8F5","options":["#5BC8F5","#87CEEB","#3D6BFF"]},"facing":{"editor":"enum","options":["N","E","S","W"],"default":"E"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const f = this.props.facing ?? 'E';
+    const words = { N: 'NORTH', E: 'EAST', S: 'SOUTH', W: 'WEST' };
+    return { glow: this.props.glow ?? '#5BC8F5', facing: f, facingWord: words[f], facingName: words[f].toLowerCase() };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Combat – werewolf</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=VT323&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#fff}a:hover{color:#9DB4FF}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; box-sizing: border-box; background: #000000; color: #FFFFFF; font-family: 'VT323', 'Courier New', monospace">
+
+  <div style="position: absolute; top: 16px; left: 16px; right: 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 52px; z-index: 2">
+    <button aria-label="Compass, facing north. Open map" style="width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; align-items: center; justify-content: center; padding: 0; color: #FFFFFF; cursor: pointer">
+      <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="#FFFFFF" stroke-width="2"><circle cx="16" cy="16" r="13"></circle><path d="M16 5 L20 16 L16 14 L12 16 Z" fill="#FFFFFF"></path><path d="M16 27 L12 16 L16 18 L20 16 Z"></path></svg>
+    </button>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; flex-grow: 1">
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">STR</span><span style="font-size: 22px">38/46</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">AGI</span><span style="font-size: 22px">20/24</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">WIS</span><span style="font-size: 22px">12/12</span></div>
+      <div style="display: flex; flex-direction: column; align-items: center; line-height: 1"><span style="font-size: 16px; color: #BDBDBD">FAI</span><span style="font-size: 22px">8/8</span></div>
+    </div>
+    <button aria-label="Menu" style="width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+      <svg width="26" height="22" viewBox="0 0 26 22" aria-hidden="true" stroke="#FFFFFF" stroke-width="3"><path d="M2 3 H24 M2 11 H24 M2 19 H24"></path></svg>
+    </button>
+  </div>
+  <div style="position: absolute; top: 176px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: baseline; z-index: 2">
+    <span style="font-size: 28px; color: #E5383B">WEREWOLF</span><span style="font-size: 20px; color: #BDBDBD">CLOSE</span>
+  </div>
+  <div style="position: absolute; top: 214px; left: 16px; right: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 24px; line-height: 1.15">
+    <p style="margin: 0">The werewolf drops onto all fours, hackles raised, and circles to your left. A low growl rolls out of its chest.</p>
+  </div>
+  <p style="position: absolute; top: 396px; left: 112px; right: 112px; height: 84px; margin: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 26px; line-height: 1; color: #BDBDBD">Choose your action</p>
+  <div style="position: absolute; top: 500px; left: 16px; right: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 24px; line-height: 1.15">
+    <p style="margin: 0">Its red eyes never leave your legs.</p>
+  </div>
+  <button style="position: absolute; top: 80px; left: 139px; width: 112px; height: 84px; font-size: 26px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">PRAY<span style="font-size: 15px; color: #BDBDBD">FAITH</span></button>
+  <button style="position: absolute; top: 396px; left: 0; width: 112px; height: 84px; font-size: 26px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">ITEM<span style="font-size: 15px; color: #BDBDBD">AGILITY</span></button>
+  <button style="position: absolute; top: 396px; right: 0; width: 112px; height: 84px; font-size: 26px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">ATTACK<span style="font-size: 15px; color: #BDBDBD">STRENGTH</span></button>
+  <button style="position: absolute; bottom: 48px; left: 139px; width: 112px; height: 84px; font-size: 26px; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; z-index: 2; background: #000000; color: #FFFFFF; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; cursor: pointer">BLOCK<span style="font-size: 15px; color: #BDBDBD">WISDOM</span></button>
+  <div style="position: absolute; bottom: 18px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 12px; z-index: 2" aria-label="Carousel page 1 of 3">
+    <span style="width: 12px; height: 12px; background: #FFFFFF; box-shadow: 2px 2px 0 {{glow}}"></span>
+    <span style="width: 10px; height: 10px; border: 2px solid #FFFFFF; box-sizing: border-box; background: #000000"></span>
+    <span style="width: 10px; height: 10px; border: 2px solid #FFFFFF; box-sizing: border-box; background: #000000"></span>
+  </div>
+  <button aria-label="Character" style="position: absolute; bottom: 16px; left: 16px; width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; z-index: 3"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke-width="2.5"><path transform="translate(1.5 1.5)" stroke="{{glow}}" d="M16 4 A6 6 0 1 1 15.9 4 Z M6 29 C6 20 26 20 26 29 Z"></path><path stroke="#FFFFFF" d="M16 4 A6 6 0 1 1 15.9 4 Z M6 29 C6 20 26 20 26 29 Z"></path></svg></button>
+  <button aria-label="Inventory" style="position: absolute; bottom: 16px; right: 16px; width: 48px; height: 48px; background: #000000; border: 2px solid #FFFFFF; box-shadow: 3px 3px 0 {{glow}}; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; z-index: 3"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke-width="2.5"><path transform="translate(1.5 1.5)" stroke="{{glow}}" d="M8 10 H24 V28 H8 Z M12 10 V7 C12 3 20 3 20 7 V10 M8 18 H24 M14 18 V22 H18 V18"></path><path stroke="#FFFFFF" d="M8 10 H24 V28 H8 Z M12 10 V7 C12 3 20 3 20 7 V10 M8 18 H24 M14 18 V22 H18 V18"></path></svg></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"glow":{"editor":"color","default":"#5BC8F5","options":["#5BC8F5","#87CEEB","#3D6BFF"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { glow: this.props.glow ?? '#5BC8F5' };
+  }
+}
+</script>
+</body>
+</html>
