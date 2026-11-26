@@ -37,6 +37,8 @@ export function summarize(res) {
     noClue: st.noClue / st.exchanges, enemyBlocks: st.enemyBlocks / st.exchanges,
     clanks: st.clanks / n, clashes: st.clashes / n,
     clashWinShare: (st.clashWins || 0) / Math.max(1, (st.clashWins || 0) + (st.clashLosses || 0)),
+    tellRate: (st.tells || 0) / st.exchanges, focusedRate: (st.focusedExchanges || 0) / st.exchanges,
+    prayRate: (st.prays || 0) / st.exchanges,
   };
 }
 
@@ -47,7 +49,7 @@ function run(enemyId, label, make) {
   console.log(`${enemyId.padEnd(13)} ${label.padEnd(30)} wins ${pct(s.winRate).padStart(6)} | winners keep ${pct(s.leftMedian)} ` +
     `(middle half ${pct(s.leftQ1)}–${pct(s.leftQ3)}) | scrapes ${pct(s.scrape)}, cost 40–70% ${pct(s.costly)}, flawless ${pct(s.flawless)} ` +
     `| ${s.avgLen.toFixed(1)} exchanges (middle half ${s.lenQ1}–${s.lenQ3}) | misses ${pct(s.missRate)} (by chance ${pct(s.chanceMissRate)}, situational ${pct(s.situationalMissRate)}; you ${pct(s.playerMissRate)}, it ${pct(s.enemyMissRate)}) ` +
-    `| no clue ${pct(s.noClue)}, blocks ${pct(s.enemyBlocks)}, Clanks ${s.clanks.toFixed(2)}, Clashes ${s.clashes.toFixed(2)} per fight (you win ${pct(s.clashWinShare)})`);
+    `| tells in ${pct(s.tellRate)} of exchanges (Focused ${pct(s.focusedRate)}, prays ${pct(s.prayRate)}), blocks ${pct(s.enemyBlocks)}, Clanks ${s.clanks.toFixed(2)}, Clashes ${s.clashes.toFixed(2)} per fight (you win ${pct(s.clashWinShare)})`);
   return s;
 }
 

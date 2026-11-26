@@ -173,28 +173,20 @@ test('Luck ignores current stamina', () => {
 
 // --- Clues -------------------------------------------------------------------
 
-test('Tells: a bigger WIS + FAI lead means fewer hidden moves and more second clues', () => {
-  let prev = R.tellOdds(-30);
-  for (let score = -25; score <= 30; score += 5) {
-    const o = R.tellOdds(score);
-    ok(o.none <= prev.none && o.both >= prev.both, `score ${score}`);
-    prev = o;
+test('Tells: a bigger WIS + FAI lead makes a tell source work more often', () => {
+  let prev = R.tellWorkChance(-40);
+  for (let score = -35; score <= 40; score += 5) {
+    const w = R.tellWorkChance(score);
+    ok(w >= prev, `score ${score}`);
+    prev = w;
   }
+  ok(R.tellWorkChance(15) > 0.8, 'a big lead: most exchanges');
+  ok(R.tellWorkChance(-15) < 0.2, 'a big deficit: now and then');
 });
-test('Tells: never 0% and never 100%, even with a huge lead or deficit', () => {
-  for (const score of [-200, -40, 0, 40, 200]) {
-    const o = R.tellOdds(score);
-    for (const k of ['none', 'one', 'both']) ok(o[k] > 0 && o[k] < 1, `${k} at ${score}: ${o[k]}`);
-    ok(Math.abs(o.none + o.one + o.both - 1) < 1e-9, 'adds to 1');
-  }
-  ok(R.tellOdds(200).none >= 0.02 && R.tellOdds(-200).both >= 0.02, 'the odd tell either way');
-});
-test('Tells: a starting Human Fighter at full stamina (lead 7–8) mostly sees one clue', () => {
-  for (const lead of [7, 8]) {
-    const o = R.tellOdds(lead);
-    ok(o.none > 0.17 && o.none < 0.27, `none ${o.none.toFixed(3)} (about 1 in 4 or 5)`);
-    ok(o.both > 0.2 && o.both < 0.3, `both ${o.both.toFixed(3)} (about 1 in 4)`);
-    ok(o.one > 0.45, `one ${o.one.toFixed(3)} (most of the time)`);
+test('Tells: a source never works every time, and never fails every time', () => {
+  for (const score of [-500, -40, 0, 40, 500]) {
+    const w = R.tellWorkChance(score);
+    ok(w > 0 && w < 1, `${score}: ${w}`);
   }
 });
 test('Tells: the reading lead uses current WIS + FAI stamina, not totals', () => {
@@ -203,15 +195,11 @@ test('Tells: the reading lead uses current WIS + FAI stamina, not totals', () =>
   c.attrs.WIS.stamina = 1;
   eq(R.readingLead(c, { STR: 9, AGI: 9, WIS: 3, FAI: 2 }), 7 - 5);
 });
-test('Clues: +1 at Luck 20 and Luck 40, flat bonuses, at most the step’s tells, one fewer at Night', () => {
-  eq(R.cluesShown({ tier: 1, luck: 19 }), 1);
-  eq(R.cluesShown({ tier: 0, luck: 20 }), 1);
-  eq(R.cluesShown({ tier: 0, luck: 40, tellCount: 5 }), 2);
-  eq(R.cluesShown({ tier: 1, clueBonus: 1 }), 2);
-  eq(R.cluesShown({ tier: 1, clueBonus: -1 }), 0);
-  eq(R.cluesShown({ tier: 2, luck: 40 }), 2, 'capped at the step’s two tells');
-  eq(R.cluesShown({ tier: 2, night: true }), 1);
-  eq(R.cluesShown({ tier: 1, night: true }), 0);
+test('Tells: Night lowers a tell one step (exact → narrow → reverse → nothing)', () => {
+  eq(R.tellLevelAfterNight(R.TELL_LEVEL.exact, true), R.TELL_LEVEL.narrow);
+  eq(R.tellLevelAfterNight(R.TELL_LEVEL.narrow, true), R.TELL_LEVEL.reverse);
+  eq(R.tellLevelAfterNight(R.TELL_LEVEL.reverse, true), 0);
+  eq(R.tellLevelAfterNight(R.TELL_LEVEL.reverse, false), 1);
 });
 
 // --- Fortune openings and lucky dice ---------------------------------------

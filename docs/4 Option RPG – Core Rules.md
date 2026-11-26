@@ -10,7 +10,7 @@ The game is a text-first, four-option RPG for mobile (playable on desktop) in a 
 - **One Almighty God.** Lesser spiritual beings exist beneath Him, some loyal and some fallen, in the spirit of C.S. Lewis, Brian Godawa, and Michael Heiser. Miracles are prayers God answers, not spells a character owns.
 - **Giant-kin enemies** (the Nephilim idea) appear under a name still to be created.
 - **Information, not certainty:** attributes and traits improve the clues a player gets, never the correctness of their choice. The single exception is the Prophet's Foretell miracle.
-- **Enemies follow learnable patterns, with feints:** each enemy runs through a pattern of moves in order. At every step it usually makes the step's main move, but sometimes feints: it makes a different move that begins with the same first clue. The second clue gives the feint away. How much a character reads each exchange comes from comparing their current WIS + FAI stamina with the enemy's (see **Tells**): sometimes the enemy hides its intent entirely (no clues and a neutral caption such as "It watches you."), usually the character catches the first clue, and sometimes both. Enemies also Block: some pattern moves are Blocks with their own clues, an enemy may flinch and Block the spot it was just hit hard, and it Blocks more readily where the player keeps striking. Repeating the same action at the same target two exchanges running draws a counter. Rare titled elites adapt to the player further.
+- **Enemies follow learnable patterns, with feints:** each enemy runs through a pattern of moves in order. At every step it usually makes the step's main move, but sometimes feints: it makes a different move instead. Enemies give no tells by default; the narrative describes them in neutral words that don't reveal the next move, so a player relies on knowing the pattern. Tells come only from a source (see **Tells**) and usually say what the enemy won't do. Enemies also Block: some pattern moves are Blocks, an enemy may flinch and Block the spot it was just hit hard, and it Blocks more readily where the player keeps striking. Repeating the same action at the same target two exchanges running draws a counter. Rare titled elites adapt to the player further.
 
 ## Attributes, stamina, and Luck
 
@@ -147,14 +147,14 @@ Traits come in three durations, each with a positive and a negative form.
 
 | Trait | Type | Effect | Removed by |
 | --- | --- | --- | --- |
-| Focused | TPT | One extra clue next exchange | Used, or Sleep |
+| Focused | TPT | Reverse tells (what the enemy won't do) for 3 exchanges | After 3 exchanges, or Sleep |
 | Emboldened | TPT | Immune to Fear; Advantage on the next attack | Used, or Sleep |
 | Steeled | TPT | The next TNT you would gain is ignored | Used, or Sleep |
 | Blessed | TPT | The next hit you take deals 25% less damage | Used, or Sleep |
 | Nimble | TPT | Speed advantage on your next position change | Used, or Sleep |
 | Well-Fed | TPT | Stamina drains 25% slower | Sleep |
 | Winded | TNT | Can't use Drawn actions | Rest |
-| Dazed | TNT | One fewer clue each exchange | Rest |
+| Dazed | TNT | No tells at all | Rest |
 | Shaken | TNT | Disadvantage in Clashes | Rest or Prayer |
 | Hungover | TNT | Disadvantage on Wisdom actions | Rest |
 | Fatigued | TNT | Abilities that reset through Rest don't reset | Sleep only |
@@ -314,9 +314,21 @@ Combat is simultaneous action with pauses: time stops, the player reads the enem
 
 **The exchange**
 
-1. Time pauses and the player receives clues about the enemy's intent: sight, sound, speech, movement, environment, and habit. Some exchanges the enemy gives nothing away.
+1. Time pauses. The narrative describes the enemy in neutral words that don't give its next move away; a player with a tell source may also get a tell.
 
-**Tells:** each exchange, compare the player's current WIS + FAI stamina with the enemy's. The bigger the player's lead, the less often the enemy hides its intent (no clue at all) and the more often the second clue (the one that exposes a feint) shows; the bigger the enemy's lead, the opposite. It is never certain either way: even a big lead misses the odd move, and even a big deficit catches the odd tell. Luck still adds a clue at 20 and again at 40, Night still takes one away, and abilities, traits (TPTs, TNTs, CPTs, CNTs, PPTs, PNTs), and items can add or subtract (Focused +1 clue, Dazed −1). An Enraged enemy is harder to read. The character screen shows how well the character is reading the enemy right now: good, fair, or poor.
+**Tells:** by default the enemy gives no tells. Tells come only from a source: an ability, a trait (TPT, CPT, PPT), or an item. Tells are always true, and usually say what the enemy **won't** do, so the guessing comes from what they leave out:
+
+| Source strength | What the tell says | Example |
+| --- | --- | --- |
+| Reverse (weak) | Rules out one option | "It's avoiding your legs." |
+| Narrow (stronger) | Rules out two: two options left | "It's going for your head or your left side." |
+| Exact (very strong) | Names the move | "It's going for your legs." |
+
+- **How often a source works:** compare the player's current WIS + FAI stamina with the enemy's. A big lead means the source works most exchanges, a big deficit only now and then; never always and never never. An Enraged enemy is harder to read.
+- **Night** lowers a tell one step: exact becomes narrow, narrow becomes reverse, and reverse becomes nothing.
+- If a character has several sources, the strongest is used. **Dazed** blocks all tells.
+- A player who has learned an enemy's pattern can combine it with a reverse tell to make a good guess (if the pattern says legs or left, and the tell says "It's avoiding your legs," it's going left).
+- The character screen shows how well the character is reading the enemy right now: good, fair, or poor (how often their source works), or no tells.
 2. The player picks an action (Pray, Attack, Block, Item, or an ability) and, for attacks and blocks, a target: Head, Left, Right, or Legs, always from the player's perspective.
 3. Both actions resolve, faster first. A faster attack can stop a slower one only if it carries a trait, such as a Stagger; the slower action takes a disadvantage.
 
@@ -346,7 +358,7 @@ Two attacks meet when their speeds are equal or one step apart (Swift and Fair, 
 - A successful lucky attempt never misses. Fortune's Favor (Bard) turns one miss into a hit, once per Rest.
 - Misses roll through the same seeded random function as everything else, so a fight can be replayed.
 
-**Clash event:** the enemy has already chosen a direction: usually the one its pattern gives that move, but not always (each enemy has a habit; otherwise it goes one of the other three ways). The player gets indirect clues, scaled by WIS, FAI, Luck, traits, and abilities, and picks a direction. The winner's attack lands with its normal damage (weapon, bonus attribute, armor, traits and abilities that change damage, and all the usual rules), draining the loser's stamina the usual way; it can't miss, because they won the Clash. The loser's attack does not land. The winner also gets Advantage on their next attack, and the loser gains a TNT (Off-Balance). It works the same way for the player and for enemies. Blocks and evades use the same prediction.
+**Clash event:** the enemy has already chosen a direction: usually the one its pattern gives that move, but not always (each enemy has a habit; otherwise it goes one of the other three ways). The player gets no clue about the direction unless a tell source gives one (the same rule as other tells: "In the Clash it won't go low, at your legs."), and picks a direction. The winner's attack lands with its normal damage (weapon, bonus attribute, armor, traits and abilities that change damage, and all the usual rules), draining the loser's stamina the usual way; it can't miss, because they won the Clash. The loser's attack does not land. The winner also gets Advantage on their next attack, and the loser gains a TNT (Off-Balance). It works the same way for the player and for enemies. Blocks and evades use the same prediction.
 
 **Conditions and states**
 

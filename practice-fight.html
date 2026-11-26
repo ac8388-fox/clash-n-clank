@@ -140,7 +140,7 @@
   import { readingLabel } from './engine/combat.js';
 
   const SAVE = 'clash-n-clank.practice';
-  const SAVE_VERSION = 7;   // bump when combat rules change; older saves start fresh
+  const SAVE_VERSION = 8;   // bump when combat rules change; older saves start fresh
   const DIRS = ['up', 'right', 'down', 'left'];
   const TARGET_OF = { up: 'head', left: 'left', right: 'right', down: 'legs' };
   const TARGET_NAME = { head: 'Head', left: 'Left', right: 'Right', legs: 'Legs' };
@@ -288,7 +288,7 @@
     for (const c of P.conditions) bits.push(`<span class="cond">${TRAITS[c.id].name}</span>`);
     if (P.advantageNext) bits.push('<span class="tpt">Advantage next attack</span>');
     if (P.speedPenaltyNext) bits.push('<span class="cond">Next action slower</span>');
-    for (const t of character.traits.filter(t => t.kind === 'TPT')) bits.push(`<span class="tpt">${TRAITS[t.id].name}</span>`);
+    for (const t of character.traits.filter(t => t.kind === 'TPT')) bits.push(`<span class="tpt">${TRAITS[t.id].name}${t.left ? ` (${t.left})` : ''}</span>`);
     for (const c of combat.enemy.conditions) bits.push(`<span class="cond">Werewolf ${TRAITS[c.id].name}</span>`);
     if (combat.enemy.enraged) bits.push('<span class="cond">Werewolf Enraged</span>');
     $('status').innerHTML = bits.join(' · ');

@@ -7,11 +7,12 @@
 
 import { test as baseTest, slowTest, eq, ok, throws } from './harness.js';
 import * as C from '../engine/combat.js';
-import { staminaOf, MISS, missChance, luckOf as luckOfC, TELLS, tellOdds } from '../engine/rules.js';
+import { staminaOf, MISS, missChance, luckOf as luckOfC, TELLS, tellWorkChance } from '../engine/rules.js';
 import * as Rules from '../engine/rules.js';
 import * as S from '../engine/state.js';
 import { ENEMIES } from '../data/enemies.js';
 import { ARMOR } from '../data/items.js';
+import { ABILITIES } from '../data/abilities.js';
 import { practiceFighter, simulateFight, learnedPolicy, learnedClash, randomPolicy, randomClash, createRng } from './sim.js';
 import { summarize } from './balance.js';
 
@@ -52,15 +53,20 @@ function force(s, variantId) {
   }
   return s;
 }
-// Run a test with the reading roll fixed: always `tier` clues (before Luck,
-// traits, and Night), so clue counts can be checked exactly.
-function fixedTier(tier, fn) {
+// Run a test with tell sources always working (when the player has one).
+function tellsAlways(fn) {
   const saved = { ...TELLS };
-  const v = (on) => (on ? 0.999999 : 0);
-  Object.assign(TELLS, { noneLo: v(tier === 0), noneHi: v(tier === 0), bothLo: v(tier === 2), bothHi: v(tier === 2) });
+  Object.assign(TELLS, { workLo: 1, workHi: 1 });
   try { return fn(); } finally { Object.assign(TELLS, saved); }
 }
-const noHiding = (fn) => fixedTier(1, fn);
+// Tells only come from sources now, so most tests see none; kept for clarity.
+const noHiding = (fn) => fn();
+// Give a fighter a pretend tell source of some strength (for tests only).
+function withSource(strength, fn) {
+  ARMOR.leatherJerkin.tell = strength;
+  try { return fn(); } finally { delete ARMOR.leatherJerkin.tell; }
+}
+const focusedFighter = () => { const c = practiceFighter(); c.traits.push({ id: 'focused', kind: 'TPT', left: 3, gainedAt: 0 }); return c; };
 function fight(enemyId = 'werewolf', ability = 'planB', seed = 1, raceId = 'human') {
   const c = practiceFighter(ability, raceId);
   return force({ c, cb: C.startCombat(c, enemyId, { seed }) });
@@ -84,141 +90,160 @@ const totalStamina = (c) => Object.values(staminaOf(c)).reduce((a, b) => a + b, 
 test('Werewolf opens with step 1: “Its eyes drop to your legs.”', () => {
   const s = fight();
   eq(step(s), 'w1');
-  eq(s.cb.current.caption, 'Its eyes drop to your legs.');
+  ok(ENEMIES.werewolf.neutralCaptions.includes(s.cb.current.caption), 'a neutral caption');
 });
-test('Clues: one clue is the shared first clue', () => noHiding(() => {
-  const cb = C.startCombat(practiceFighter(), 'werewolf', { seed: 1 });
-  eq(cb.current.tells, ['Its eyes are on your legs']);
-  eq(cb.current.tellCount, 2);
-}));
-test('Clues: the second clue tells the main move apart from the feint', () => fixedTier(2, () => {
-  const seen = new Set();
-  for (let seed = 1; seed <= 40; seed++) {
+// --- Tells: none by default; only from a source ------------------------------------------
+
+test('Tells: none by default; the caption is neutral and doesn’t depend on the move', () => {
+  const captions = new Set();
+  for (let seed = 1; seed <= 300; seed++) {
     const cb = C.startCombat(practiceFighter(), 'werewolf', { seed });
-    eq(cb.current.tells[0], 'Its eyes are on your legs');
-    const second = cb.current.tells[1];
-    eq(second, cb.current.variantId === 'w1-legs' ? 'Its shoulder drops low' : 'A growl from your left');
-    seen.add(second);
+    eq(cb.current.tells, []);
+    eq(cb.current.tell, null);
+    ok(ENEMIES.werewolf.neutralCaptions.includes(cb.current.caption), cb.current.caption);
+    captions.add(cb.current.caption + '|' + cb.current.variantId);
   }
-  eq(seen.size, 2, 'both the main move and the feint showed up');
+  const byCaption = {};
+  for (const k of captions) { const [cap, v] = k.split('|'); (byCaption[cap] ||= new Set()).add(v); }
+  ok(Object.values(byCaption).every(set => set.size >= 2), 'each caption shows up with different moves');
+});
+test('Tells: Focused gives reverse tells (“It’s avoiding…”) for 3 exchanges, then stops', () => tellsAlways(() => {
+  let c = focusedFighter(), cb = C.startCombat(c, 'werewolf', { seed: 2 });
+  const got = [];
+  const moves = [{ action: 'block', target: 'head' }, { action: 'pray' }, { action: 'block', target: 'left' }, { action: 'block', target: 'right' }];
+  for (const m of moves) {
+    got.push(cb.current.tells.length);
+    if (cb.current.tell) ok(cb.current.tell.text.startsWith("It's avoiding "), cb.current.tell.text);
+    const r = C.submitAction(c, cb, m); c = { ...r.character, traits: r.character.traits.filter(t => t.id === 'focused') }; cb = r.combat;
+  }
+  eq(got, [1, 1, 1, 0]);
 }));
-test('Clues: Focused gives one extra clue for one exchange; Dazed one fewer', () => noHiding(() => {
-  const c = practiceFighter();
-  c.traits.push({ id: 'focused', kind: 'TPT' });
-  const cb = C.startCombat(c, 'werewolf', { seed: 1 });
-  eq(cb.current.tells.length, 2);
-  const r = C.submitAction(c, cb, { action: 'block', target: 'legs' });
-  ok(!r.character.traits.some(t => t.id === 'focused'), 'used up');
-  const d = practiceFighter(); d.traits.push({ id: 'dazed', kind: 'TNT' });
-  eq(C.startCombat(d, 'werewolf', { seed: 1 }).current.tells.length, 0);
+test('Tells: Pray can grant Focused, lasting 3 exchanges', () => {
+  for (let seed = 1; seed < 400; seed++) {
+    const s = fight('werewolf', 'planB', seed);
+    const r = C.submitAction(s.c, s.cb, { action: 'pray' });
+    const f = r.character.traits.find(t => t.id === 'focused');
+    if (f) { eq(f.left, 3); return; }
+  }
+  throw new Error('Pray never granted Focused');
+});
+test('Tells: always true — a reverse tell never rules out the spot it attacks', () => tellsAlways(() => {
+  for (let seed = 1; seed <= 400; seed++) {
+    const cb = C.startCombat(focusedFighter(), 'werewolf', { seed });
+    const mv = C.moveFor(cb);
+    eq(cb.current.tell.level, 1);
+    eq(cb.current.tell.ruledOut.length, 1);
+    if (mv.action === 'attack') ok(!cb.current.tell.ruledOut.includes(mv.target), `${mv.id}: ${cb.current.tell.text}`);
+  }
 }));
-test('Clues: one fewer at Night (the caption still shows)', () => noHiding(() => {
-  const h = C.startCombat(practiceFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' });
-  eq(h.current.tells.length, 0);
-  ok(!h.current.hidden, 'not hidden: the caption still shows');
-  eq(h.current.caption, 'Its eyes drop to your legs.');
-  eq(fixedTier(2, () => C.startCombat(practiceFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' })).current.tells.length, 1);
+test('Tells: a narrow source leaves two options, and the true one is always among them', () => tellsAlways(() => withSource('narrow', () => {
+  for (const enemyId of ['werewolf', 'barrowKnight']) {
+    for (let seed = 1; seed <= 300; seed++) {
+      const cb = C.startCombat(practiceFighter(), enemyId, { seed });
+      const mv = C.moveFor(cb), t = cb.current.tell;
+      eq(t.level, 2); eq(t.ruledOut.length, 2);
+      if (mv.action === 'attack') {
+        ok(!t.ruledOut.includes(mv.target) && t.text.startsWith("It's going for "), t.text);
+      } else {
+        ok(t.text.startsWith("It won't strike "), t.text);
+      }
+    }
+  }
+})));
+test('Tells: only an exact source names the move', () => tellsAlways(() => withSource('exact', () => {
+  const seen = new Set();
+  for (let seed = 1; seed <= 200; seed++) {
+    const cb = C.startCombat(practiceFighter(), 'barrowKnight', { seed });
+    const mv = C.moveFor(cb), t = cb.current.tell;
+    eq(t.exact, { action: mv.action, target: mv.target || null });
+    seen.add(t.text);
+  }
+  ok([...seen].some(x => x.startsWith("It's going for ")) && [...seen].some(x => x.startsWith('It will guard ')), [...seen].join(' / '));
+})));
+test('Tells: the strongest source a fighter has is the one used', () => withSource('narrow', () => {
+  const c = focusedFighter();
+  const ts = C.tellSources(c);
+  eq(ts.sources.map(x => x.strength), ['narrow', 'reverse']);
+  eq(ts.best.strength, 'narrow');
 }));
-
-// --- Reading the enemy: tells from the WIS + FAI comparison -------------------------------
-
-function clueRates(character, enemyId, N = 3000, setup = null) {
-  const n = [0, 0, 0];
+test('Tells: Dazed blocks all tells, even with Focused', () => tellsAlways(() => {
+  const c = focusedFighter(); c.traits.push({ id: 'dazed', kind: 'TNT' });
+  for (let seed = 1; seed <= 50; seed++) eq(C.startCombat(c, 'werewolf', { seed }).current.tells, []);
+  eq(C.readingLabel(c, C.startCombat(c, 'werewolf', { seed: 1 })).label, 'blocked (Dazed)');
+}));
+test('Tells: one step weaker at Night (Focused gives nothing; narrow becomes reverse)', () => tellsAlways(() => {
+  eq(C.startCombat(focusedFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' }).current.tells, []);
+  withSource('narrow', () => {
+    eq(C.startCombat(practiceFighter(), 'werewolf', { seed: 1, timeOfDay: 'Night' }).current.tell.level, 1);
+  });
+}));
+function tellRate(character, enemyId, N = 2000, setup = null) {
+  let n = 0;
   for (let seed = 1; seed <= N; seed++) {
     let cb = C.startCombat(character, enemyId, { seed });
     if (setup) cb = C.beginExchange(character, setup(cb));
-    n[cb.current.tells.length]++;
+    if (cb.current.tell) n++;
   }
-  return n.map(x => x / N);
+  return n / N;
 }
-test('Tells: a starting Human Fighter at full stamina sees no clue about 1 exchange in 4 or 5, one clue most often, both about 1 in 4', () => {
-  for (const id of ['werewolf', 'barrowKnight']) {
-    const [none, one, both] = clueRates(practiceFighter(), id);
-    ok(none > 0.16 && none < 0.28, `${id}: none ${(100 * none).toFixed(1)}%`);
-    ok(both > 0.19 && both < 0.31, `${id}: both ${(100 * both).toFixed(1)}%`);
-    ok(one > none && one > both, `${id}: one ${(100 * one).toFixed(1)}%`);
-  }
+test('Tells: how often a source works comes from the WIS + FAI comparison', () => {
+  const c = focusedFighter();
+  const expect = C.readingFor(c, C.startCombat(c, 'werewolf', { seed: 1 })).workChance;
+  const got = tellRate(c, 'werewolf', 3000);
+  ok(Math.abs(got - expect) < 0.03, `${got} vs ${expect}`);
+  const sage = focusedFighter(); for (const k of ['WIS', 'FAI']) { sage.attrs[k].natural = 18; sage.attrs[k].stamina = 18; }
+  const dull = focusedFighter(); dull.attrs.WIS.stamina = 0; dull.attrs.FAI.stamina = 0;
+  const hi = tellRate(sage, 'werewolf'), lo = tellRate(dull, 'werewolf');
+  ok(hi > got && got > lo, `lead ${hi} > human ${got} > deficit ${lo}`);
+  ok(hi < 1 && lo > 0, 'never always, never never');
 });
-test('Tells: the rolled rate matches the odds for the current WIS + FAI comparison', () => {
-  const c = practiceFighter();
-  const odds = C.readingFor(c, C.startCombat(c, 'werewolf', { seed: 1 })).odds;
-  const [none, , both] = clueRates(c, 'werewolf', 4000);
-  ok(Math.abs(none - odds.none) < 0.025 && Math.abs(both - odds.both) < 0.025, `${none} vs ${odds.none}, ${both} vs ${odds.both}`);
+test('Tells: a worn-down enemy is easier to read; an Enraged one harder', () => {
+  const c = focusedFighter();
+  const fresh = C.readingFor(c, C.startCombat(c, 'barrowKnight', { seed: 1 })).workChance;
+  const cb = C.startCombat(c, 'barrowKnight', { seed: 1 });
+  const worn = C.readingFor(c, { ...cb, enemy: { ...cb.enemy, stamina: { ...cb.enemy.stamina, WIS: 0 } } }).workChance;
+  const wild = C.readingFor(c, { ...cb, enemy: { ...cb.enemy, enraged: true } }).workChance;
+  ok(worn > fresh && wild < fresh, `${worn} > ${fresh} > ${wild}`);
 });
-test('Tells: a bigger WIS + FAI lead shows more; a deficit shows less (never all, never nothing)', () => {
-  const sage = practiceFighter();   // WIS and FAI raised together, so Luck stays low
-  for (const k of ['WIS', 'FAI']) { sage.attrs[k].natural = 18; sage.attrs[k].stamina = 18; }
-  const dull = practiceFighter(); dull.attrs.WIS.stamina = 0; dull.attrs.FAI.stamina = 0;
-  const [sNone, , sBoth] = clueRates(sage, 'werewolf', 2000);
-  const [dNone, , dBoth] = clueRates(dull, 'werewolf', 2000);
-  const [hNone, , hBoth] = clueRates(practiceFighter(), 'werewolf', 2000);
-  ok(sNone < hNone && sBoth > hBoth, `big lead: none ${sNone}, both ${sBoth}`);
-  ok(dNone > hNone && dBoth < hBoth, `deficit: none ${dNone}, both ${dBoth}`);
-  ok(sNone > 0 && dBoth > 0, 'even a big lead misses the odd move; a deficit catches the odd tell');
-  ok(sBoth < 1 && dNone < 1, 'never certain');
-});
-test('Tells: it uses current stamina, so a worn-down enemy is easier to read', () => {
-  const c = practiceFighter();
-  const tired = (cb) => ({ ...cb, exchange: 0, enemy: { ...cb.enemy, stamina: { ...cb.enemy.stamina, WIS: 0, FAI: 0 } } });
-  const [, , fresh] = clueRates(c, 'barrowKnight', 2000);
-  const [, , worn] = clueRates(c, 'barrowKnight', 2000, tired);
-  ok(worn > fresh, `${worn} > ${fresh}`);
-});
-test('Tells: any trait, ability, or equipped item can add or subtract reading', () => {
-  const c = practiceFighter();
-  eq(C.readingModifiers(c), { read: 0, clues: 0 });
-  c.traits.push({ id: 'focused', kind: 'TPT' }, { id: 'dazed', kind: 'TNT' });
-  eq(C.readingModifiers(c), { read: 0, clues: 0 }, 'Focused +1 and Dazed −1 cancel');
-  ARMOR.leatherJerkin.read = 6;      // a pretend reading item, for this test only
+test('Tells: any future ability, trait, or item becomes a source just by its data', () => {
+  ABILITIES.fortunesFavor.tell = 'exact';   // pretend, for this test only
   try {
-    const plain = practiceFighter();
-    eq(C.readingModifiers(plain).read, 6, 'worn armor counts');
-    ok(C.readingFor(plain, C.startCombat(plain, 'werewolf', { seed: 1 })).odds.both > tellOdds(7).both, 'more tells');
-  } finally { delete ARMOR.leatherJerkin.read; }
+    const c = practiceFighter(); c.abilities.push('fortunesFavor');
+    eq(C.tellSources(c).best.strength, 'exact');
+  } finally { delete ABILITIES.fortunesFavor.tell; }
+  eq(C.tellSources(practiceFighter()).best, null, 'a plain Fighter has no source');
 });
-test('Tells: an Enraged enemy is harder to read; the howl itself is never hidden', () => {
-  const c = practiceFighter();
-  const wild = (cb) => ({ ...cb, exchange: 0, enemy: { ...cb.enemy, enraged: true, enrageUsed: true, loopIndex: 0 } });
-  const [calm] = clueRates(c, 'werewolf', 2000);
-  const [angry] = clueRates(c, 'werewolf', 2000, wild);
-  ok(angry > calm, `${angry} > ${calm}`);
-  for (let seed = 1; seed <= 300; seed++) {
-    const s = fight('werewolf', 'planB', seed);
-    s.cb.enemy.stamina = { STR: 1, AGI: 1, WIS: 1, FAI: 1 };
-    const b = C.beginExchange(s.c, s.cb);
-    eq(b.current.stepId, 'w5'); ok(!b.current.hidden, 'howl shown');
-  }
+test('Tells: Clash events give no clue unless a source does; a Clash tell is true', () => {
+  const plainClash = () => { const s = act(fight(), { action: 'pray' }); plain(s); return C.submitAction(s.c, s.cb, { action: 'attack', target: 'head' }).combat.pendingClash; };
+  eq(plainClash().tells, []);
+  tellsAlways(() => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const s = fight('werewolf', 'planB', seed);
+      const b = act({ c: focusedFighter(), cb: s.cb }, { action: 'block', target: 'right' }, 'w2-head');
+      b.c.traits = focusedFighter().traits;
+      const pc = C.submitAction(b.c, b.cb, { action: 'attack', target: 'head' }).combat.pendingClash;
+      ok(pc && pc.tell && !pc.tell.ruledOut.includes(pc.enemyDir), pc && pc.tell && pc.tell.text);
+    }
+  });
 });
-test('Tells: a hidden move shows no clues and a neutral caption, but the enemy still commits', () => fixedTier(0, () => {
-  const cb = C.startCombat(practiceFighter(), 'werewolf', { seed: 3 });
-  ok(cb.current.hidden, 'hidden');
-  eq(cb.current.tells, []);
-  ok(ENEMIES.werewolf.hiddenCaptions.includes(cb.current.caption), cb.current.caption);
-  ok(C.moveFor(cb), 'it still committed to a move');
-}));
-test('Reading label: “fair” for a starting Human Fighter; “good” with a big lead; “poor” at a deficit or at Night', () => {
-  const c = practiceFighter();
-  const cb = C.startCombat(c, 'werewolf', { seed: 1 });
-  eq(C.readingLabel(c, cb).label, 'fair');
-  const sage = practiceFighter(); sage.attrs.WIS.natural = 20; sage.attrs.WIS.stamina = 20;
-  eq(C.readingLabel(sage, cb).label, 'good');
-  const dull = practiceFighter(); dull.attrs.WIS.stamina = 0; dull.attrs.FAI.stamina = 1;
+test('Reading label: “no tells” without a source; good / fair / poor with one; none at Night', () => {
+  const cb = C.startCombat(practiceFighter(), 'werewolf', { seed: 1 });
+  eq(C.readingLabel(practiceFighter(), cb).label, 'no tells');
+  eq(C.readingLabel(focusedFighter(), cb).label, 'good');
+  const dull = focusedFighter(); dull.attrs.WIS.stamina = 0; dull.attrs.FAI.stamina = 1;
   eq(C.readingLabel(dull, cb).label, 'poor');
-  eq(C.readingLabel(c, { ...cb, timeOfDay: 'Night' }).label, 'poor');
+  eq(C.readingLabel(focusedFighter(), { ...cb, timeOfDay: 'Night' }).label, 'no tells at Night');
 });
 
 // --- Feints -------------------------------------------------------------------------
 
-test('Feints: every step’s variants share the first clue and caption; second clues all differ', () => {
+test('Feints: every step has a main move and one or two feints; each enemy has neutral captions', () => {
   for (const e of Object.values(ENEMIES)) {
     for (const st of e.pattern) {
-      ok(e.tellText[st.first], `${st.id} first clue has words`);
-      const seconds = st.variants.map(v => v.second);
-      eq(new Set(seconds).size, seconds.length, `${st.id} second clues differ`);
-      for (const v of st.variants) ok(e.tellText[v.second], `${v.id} second clue has words`);
-      ok(st.variants.length === 1 || (st.variants.length >= 2 && st.variants.length <= 3), `${st.id} has 1–2 feints`);
+      ok(st.variants.length >= 1 && st.variants.length <= 3, `${st.id} has 0–2 feints`);
+      eq(new Set(st.variants.map(v => v.id)).size, st.variants.length, `${st.id} move ids differ`);
     }
-    for (const t of C.TARGETS) ok(e.blockTells[t], `${e.id} has a Block clue for ${t}`);
+    ok(e.neutralCaptions.length >= 2, `${e.id} has neutral captions`);
   }
 });
 test('Feints: the enemy usually does the main action; feints come at the set rate', () => {
@@ -273,7 +298,6 @@ test('Not blocking: the claws rake your legs', () => {
 test('After it is Blocked, the werewolf jumps to step 2 (jaws at your throat)', () => {
   const r = act(fight(), { action: 'block', target: 'legs' });
   eq(step(r), 'w2');
-  eq(r.cb.current.caption, 'Its jaws open toward your throat.');
 });
 test('Blocking step 2 does not loop step 2 forever: it moves on to step 3', () => {
   let s = act(fight(), { action: 'block', target: 'legs' });
@@ -283,14 +307,14 @@ test('Blocking step 2 does not loop step 2 forever: it moves on to step 3', () =
 test('Phone check: when it circles to your right (main action), Block → Right stops the hit', () => {
   let s = act(fight(), { action: 'pray' });
   s = act(s, { action: 'block', target: 'left' });
-  eq(s.cb.current.caption, 'It circles to your right.');
+  eq(step(s), 'w3');
   const r = act(s, { action: 'block', target: 'right' });
   eq(staminaOf(r.c), staminaOf(s.c));
 });
 test('Phone check: the crouching trick (main action) bites your Head, not your legs', () => {
   let s = fight();
   for (const m of [{ action: 'pray' }, { action: 'block', target: 'left' }, { action: 'pray' }]) s = act(s, m);
-  eq(s.cb.current.caption, 'It crouches, eyes on your legs.');
+  eq(step(s), 'w4');
   ok(totalStamina(act(s, { action: 'block', target: 'legs' }).c) < totalStamina(s.c), 'blocking legs fails');
   eq(staminaOf(act(s, { action: 'block', target: 'head' }).c), staminaOf(s.c));
 });
@@ -298,7 +322,7 @@ test('Below half stamina: it howls at the moon, becomes Enraged, once only', () 
   let s = fight();
   s.cb.enemy.stamina = { STR: 2, AGI: 2, WIS: 2, FAI: 2 };
   s.cb = C.beginExchange(s.c, s.cb); force(s);
-  eq(step(s), 'w5'); eq(s.cb.current.caption, 'It howls at the moon.');
+  eq(step(s), 'w5');
   s = act(s, { action: 'pray' });
   ok(s.cb.enemy.enraged, 'Enraged');
   ok(step(s) !== 'w5', 'not repeated');
@@ -307,7 +331,6 @@ test('Below half stamina: it howls at the moon, becomes Enraged, once only', () 
 test('Enraged: its attacks deal 1 more damage (and it hides more often: see Hiding)', () => noHiding(() => {
   const s = fight(); s.cb.enemy.enraged = true;
   s.cb = C.beginExchange(s.c, { ...s.cb, exchange: 0, enemy: { ...s.cb.enemy, loopIndex: 0 } }); force(s);
-  eq(s.cb.current.tells.length, 1, 'clues are not taken away');
   eq(act(s, { action: 'pray' }).c.attrs.AGI.stamina, 6 - (CLAW + 1));
 }));
 
@@ -319,11 +342,13 @@ test('Enemy Block: a Block on the spot you attack stops your hit; another spot s
   eq(act(s, { action: 'attack', target: 'head' }).cb.enemy.stamina, s.cb.enemy.stamina);
   ok(act(s, { action: 'attack', target: 'legs' }).cb.enemy.stamina.STR < s.cb.enemy.stamina.STR, 'legs hit');
 });
-test('Enemy Block: has its own second clue, so a careful player can see it coming', () => {
-  const w2 = ENEMIES.werewolf.pattern[1];
-  const g = w2.variants.find(v => v.action === 'block');
-  eq(C.variantTells(ENEMIES.werewolf, w2, g), ['Its hackles rise', 'It ducks its head low']);
-});
+test('Enemy Block: a tell source can show a Block coming, so you can attack somewhere else', () => tellsAlways(() => withSource('exact', () => {
+  let s = act(fight(), { action: 'pray' }, 'w2-guard');
+  s.cb = C.beginExchange(s.c, { ...s.cb, exchange: s.cb.exchange - 1, player: { ...s.cb.player, history: [] }, enemy: { ...s.cb.enemy, loopIndex: 1, lastStepId: null } });
+  s = force(s, 'w2-guard');
+  const t = C.moveTell(3, C.moveFor(s.cb), { next: () => 0 });
+  eq(t.text, 'It will guard its head instead of striking.');
+})));
 test('Enemy Block: while it blocks it isn’t attacking, so Pray gives two blessings', () => {
   const s = force(act(fight(), { action: 'pray' }), 'w2-guard');
   s.c.traits = s.c.traits.filter(t => t.kind !== 'TPT');
@@ -342,7 +367,6 @@ test('Flinch: after a hard hit it may flinch, and its main move Blocks the spot 
   ok(fl, 'flinch is possible');
   eq(fl.p, ENEMIES.werewolf.flinchChance);
   eq(fl.step.variants[0].action, 'block'); eq(fl.step.variants[0].target, 'legs');
-  eq(C.variantTells(ENEMIES.werewolf, fl.step, fl.step.variants[0]), ['It flinches from the blow', 'It pulls its legs in']);
 });
 test('Flinch: never twice running', () => {
   let s = act(fight(), { action: 'pray' });
@@ -362,7 +386,7 @@ test('Guard: attacking the same spot in 2 of your last 3 exchanges makes it like
   const g = s.cb.current.options.find(o => o.step.when === 'guard');
   ok(g, 'guard is possible');
   ok(Math.abs(g.p - ENEMIES.werewolf.guardChance) < 1e-9, 'at its guard chance');
-  eq(g.step.variants[0], { id: 'guard-block-left', second: 'block-left', action: 'block', target: 'left' });
+  eq(g.step.variants[0], { id: 'guard-block-left', action: 'block', target: 'left' });
 });
 test('Guard: the barrow knight guards more readily than the werewolf', () => {
   ok(ENEMIES.barrowKnight.guardChance > ENEMIES.werewolf.guardChance, 'guard chance');
@@ -477,8 +501,6 @@ test('Repetition: the same action and target two exchanges running makes its nex
   let s = act(fight(), { action: 'attack', target: 'left' });
   s = act(s, { action: 'attack', target: 'left' });
   eq(step(s), 'counter');
-  eq(s.cb.current.caption, 'It has read your rhythm.');
-  eq(s.cb.current.tells, ['It watches your every move']);
 }));
 test('Repetition: the counter is a fast attack with Advantage', () => {
   let s = act(fight(), { action: 'attack', target: 'left' });
@@ -770,17 +792,15 @@ test('Cooldowns: Plan B (Fair) is unavailable for 2 exchanges, Crusher (Drawn) f
 });
 test('Barrow Knight: Block → Legs (main action) stops an attack at the legs', () => {
   const s = act(fight('barrowKnight'), { action: 'block', target: 'head' });
-  eq(s.cb.current.caption, 'It plants its feet, blade low.');
+  eq(step(s), 'k3');
   eq(act(s, { action: 'attack', target: 'legs' }).cb.enemy.stamina, s.cb.enemy.stamina);
 });
 test('Barrow Knight: the trick (step 4) looks like step 1 but its main swing goes for your legs', () => noHiding(() => {
   let s = act(fight('barrowKnight'), { action: 'block', target: 'head' });  // k1 → k3
   s = act(s, { action: 'pray' });                                          // k3 → k4
   eq(step(s), 'k4');
-  eq(s.cb.current.caption, 'The visor turns to your head.');
   const k1 = ENEMIES.barrowKnight.pattern[0], k4 = ENEMIES.barrowKnight.pattern[3];
-  eq(k4.first, k1.first, 'same first clue');
-  eq(k4.variants[0].second, k1.variants[0].second, 'same second clue: only counting tells them apart');
+  eq([k1.variants[0].target, k4.variants[0].target], ['head', 'legs'], 'only counting the swings gives it away');
   eq(staminaOf(act(s, { action: 'block', target: 'legs' }).c), staminaOf(s.c));
 }));
 
@@ -860,7 +880,7 @@ test('Same seed and same choices replay the same fight, feints included', () => 
 // --- Balance (slow: run on a computer with node tests/run-node.js) ---------------------------
 // Targets (Build Spec → Enemies): a player who knows the patterns wins most fights
 // (about 80–90%), but wins are costly; flawless wins are rare; fights last
-// 10–20 exchanges; chance misses about 1 in 15; no clue about 1 exchange in 4 or 5.
+// 10–20 exchanges; chance misses about 1 in 15; tells only from a source (Focused, via Pray).
 
 for (const enemyId of ['werewolf', 'barrowKnight']) {
   slowTest(`Balance (${enemyId}): wins are likely but costly, flawless wins rare, misses uncommon`, () => {
@@ -882,7 +902,7 @@ for (const enemyId of ['werewolf', 'barrowKnight']) {
     ok(l.flawless < 0.14, `flawless ${p(l.flawless)} of wins (aim under 5%)`);
     ok(l.avgLen >= 9 && l.avgLen <= 20, `average ${l.avgLen.toFixed(1)} exchanges`);
     ok(l.chanceMissRate >= 0.02 && l.chanceMissRate <= 0.1, `chance misses ${p(l.chanceMissRate)} of attacks (aim about 1 in 15)`);
-    ok(l.noClue >= 0.15 && l.noClue <= 0.3, `no clue in ${p(l.noClue)} of exchanges`);
+    ok(l.tellRate > 0 && l.tellRate <= l.focusedRate, `tells in ${p(l.tellRate)} of exchanges, only while Focused (${p(l.focusedRate)})`);
     ok(r.winRate < l.winRate - 0.5, `learning helps: learned ${p(l.winRate)} vs random ${p(r.winRate)}`);
   });
 }

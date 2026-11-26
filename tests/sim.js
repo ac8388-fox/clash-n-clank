@@ -1,16 +1,18 @@
 // Simulated players for testing fight balance (no screens involved).
 //
 // learnedPolicy plays like a real player who knows every enemy's pattern and
-// feints: it narrows the enemy's possible moves using only the clues it can
-// see, weighs each remaining move by how likely it is, tries every choice it
-// could make in its head (using the real rules), and picks the best on
-// average. It never repeats the same action and target twice running.
+// feints: from the pattern it knows which moves are possible and how likely,
+// it narrows them with any tell it gets (tells rule moves out), tries every
+// choice it could make in its head (using the real rules), and picks the best
+// on average. It never repeats the same action and target twice running, and
+// it values Focused (reverse tells for 3 exchanges), so it prays for it when
+// that is worth an exchange.
 //
 // randomPolicy presses buttons at random.
 
 import {
   startCombat, submitAction, submitClash, availableActions,
-  variantOdds, variantTells, withVariant, focusTarget, TARGETS,
+  variantOdds, withVariant, focusTarget, TARGETS,
 } from '../engine/combat.js';
 import { getEnemy } from '../data/enemies.js';
 import { createRng } from '../engine/random.js';
@@ -25,22 +27,25 @@ export function practiceFighter(classAbility = 'planB', raceId = 'human') {
 
 const total = (m) => ATTRS.reduce((s, k) => s + m[k], 0);
 
-// The enemy moves still possible given what can be seen, with their chances.
-// Uses only what a player who knows the patterns could work out: which steps
-// were possible this exchange (and how likely), then the caption and clues.
-// When the enemy hides its intent, every move of every possible step remains.
+// Does a move fit a tell? (Tells are always true.)
+export function fitsTell(move, tell) {
+  if (!tell) return true;
+  if (tell.exact) return move.action === tell.exact.action && (move.target || null) === tell.exact.target;
+  if (tell.attacking === true && move.action !== 'attack') return false;
+  if (tell.attacking === false && move.action === 'attack') return false;
+  return !(move.action === 'attack' && tell.ruledOut.includes(move.target));
+}
+
+// The enemy moves still possible, with their chances: from the pattern (the
+// steps a pattern-knowing player expects, and each step's main move and
+// feints), narrowed by this exchange's tell.
 export function possibleMoves(combat) {
   const enemy = getEnemy(combat.enemyId);
   const cur = combat.current;
   const list = [];
   for (const { step, p } of cur.options) {
-    if (!cur.hidden && step.caption !== cur.caption) continue;
     const odds = variantOdds(enemy, step);
-    step.variants.forEach((v, i) => {
-      if (variantTells(enemy, step, v).slice(0, cur.tells.length).every((t, j) => t === cur.tells[j])) {
-        list.push({ v, p: p * odds[i] });
-      }
-    });
+    step.variants.forEach((v, i) => { if (fitsTell(v, cur.tell)) list.push({ v, p: p * odds[i] }); });
   }
   const sum = list.reduce((s, x) => s + x.p, 0);
   return list.map(x => ({ v: x.v, p: x.p / sum }));
@@ -95,6 +100,8 @@ function evaluate(character, combat, choice, clashGuess) {
   return score;
 }
 
+const TPT_VALUE = { focused: 2.5, emboldened: 1, blessed: 1, steeled: 0.5, nimble: 0 };
+
 // Value of the edges each side holds (Advantage, Off-Balance, blessings).
 function edges(character, combat) {
   let s = 0;
@@ -102,7 +109,8 @@ function edges(character, combat) {
   if (combat.player.conditions.some(x => x.id === 'offBalance')) s -= 1;
   if (combat.enemy.conditions.some(x => x.id === 'offBalance')) s += 1;
   if (combat.enemy.advantageNext) s -= 1;
-  s += 0.75 * character.traits.filter(t => t.kind === 'TPT').length;
+  // Blessings: Focused (tells for a few exchanges) is worth the most.
+  for (const t of character.traits.filter(t => t.kind === 'TPT')) s += TPT_VALUE[t.id] ?? 0.75;
   s += 1.5 * weaponQuality(character, combat);
   return s;
 }
@@ -147,7 +155,13 @@ function guardRisk(combat, ch) {
 
 // In a Clash the player knows the enemy's move (it attacked the same spot),
 // so a pattern-knowing player goes with its usual Clash direction.
-export const learnedClash = (combat) => combat.pendingClash.usualDir || guessClash(possibleMoves(combat));
+// A Clash tell (if any) may rule the usual direction out; then pick among what's left.
+export const learnedClash = (combat) => {
+  const pc = combat.pendingClash;
+  const out = (pc.tell && pc.tell.ruledOut) || [];
+  if (pc.usualDir && !out.includes(pc.usualDir)) return pc.usualDir;
+  return TARGETS.find(t => !out.includes(t));
+};
 
 // A player pressing buttons at random.
 export function randomPolicy(rng) {
@@ -169,14 +183,17 @@ export function simulateFight({ seed, policy, clashPick, enemyId = 'werewolf', c
                                timeOfDay = 'Morning', maxExchanges = 200 }) {
   let c = character;
   let cb = startCombat(c, enemyId, { seed, timeOfDay });
-  const stats = { exchanges: 0, noClue: 0, hidden: 0, twoClues: 0, enemyBlocks: 0, clanks: 0, clashes: 0 };
+  const stats = { exchanges: 0, noClue: 0, hidden: 0, twoClues: 0, enemyBlocks: 0, clanks: 0, clashes: 0, tells: 0, focusedExchanges: 0, prays: 0 };
   while (!cb.outcome && cb.exchange <= maxExchanges) {
     stats.exchanges++;
     if (cb.current.tells.length === 0) stats.noClue++;
     if (cb.current.hidden) stats.hidden++;
     if (cb.current.tells.length >= 2) stats.twoClues++;
+    if (cb.current.tell) stats.tells++;
+    if (c.traits.some(t => t.id === 'focused')) stats.focusedExchanges++;
     if (cb.current.step.variants.find(v => v.id === cb.current.variantId).action === 'block') stats.enemyBlocks++;
     const choice = policy(c, cb);
+    if (choice.action === 'pray') stats.prays++;
     const r = submitAction(c, cb, choice);
     ({ character: c, combat: cb } = r);
     if (r.lines.some(l => l.startsWith('Clank!'))) stats.clanks++;

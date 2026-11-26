@@ -1,14 +1,16 @@
 // Traits from "Core Rules" → Traits. kind is TPT/TNT/CPT/CNT/PPT/PNT.
 // clearedBy lists what removes the trait early (Sleep clears every TPT and TNT).
 //
-// Reading the enemy: any trait (and any ability or equipped item, see
-// engine/combat.js → readingModifiers) can carry
-//   read:  points added to the reading score (more tells, fewer hidden moves)
-//   clues: a flat change to the number of clues shown
+// Tells: any trait (and any ability or equipped item, see
+// engine/combat.js → tellSources) can carry
+//   tell:        'reverse' | 'narrow' | 'exact' – it is a tell source of that strength
+//   blocksTells: true – no tells at all while it lasts
+//   read:        points on the reading score (how often a source works)
+// duration: how many exchanges a combat trait lasts (counted down in combat).
 
 export const TRAITS = {
   // Combat TPTs that Pray can grant
-  focused:    { id: 'focused',    name: 'Focused',    kind: 'TPT', effect: 'One extra clue next exchange',            clearedBy: ['used', 'sleep'], clues: 1 },
+  focused:    { id: 'focused',    name: 'Focused',    kind: 'TPT', effect: 'Reverse tells (what the enemy won’t do) for 3 exchanges', clearedBy: ['expires', 'sleep'], tell: 'reverse', duration: 3 },
   emboldened: { id: 'emboldened', name: 'Emboldened', kind: 'TPT', effect: 'Immune to Fear; Advantage on the next attack', clearedBy: ['used', 'sleep'] },
   steeled:    { id: 'steeled',    name: 'Steeled',    kind: 'TPT', effect: 'The next TNT you would gain is ignored',  clearedBy: ['used', 'sleep'] },
   blessed:    { id: 'blessed',    name: 'Blessed',    kind: 'TPT', effect: 'The next hit you take deals 25% less damage', clearedBy: ['used', 'sleep'] },
@@ -17,7 +19,7 @@ export const TRAITS = {
 
   // TNTs
   winded:     { id: 'winded',     name: 'Winded',     kind: 'TNT', effect: "Can't use Drawn actions",                 clearedBy: ['rest', 'sleep'] },
-  dazed:      { id: 'dazed',      name: 'Dazed',      kind: 'TNT', effect: 'One fewer clue each exchange',            clearedBy: ['rest', 'sleep'], clues: -1 },
+  dazed:      { id: 'dazed',      name: 'Dazed',      kind: 'TNT', effect: 'No tells at all',                         clearedBy: ['rest', 'sleep'], blocksTells: true },
   shaken:     { id: 'shaken',     name: 'Shaken',     kind: 'TNT', effect: 'Disadvantage in Clashes',                 clearedBy: ['rest', 'prayer', 'sleep'] },
   fatigued:   { id: 'fatigued',   name: 'Fatigued',   kind: 'TNT', effect: "Abilities that reset through Rest don't reset", clearedBy: ['sleep'] },
   bruised:    { id: 'bruised',    name: 'Bruised',    kind: 'TNT', effect: 'Disadvantage on attacks with the bruised limb', clearedBy: ['sleep'] },

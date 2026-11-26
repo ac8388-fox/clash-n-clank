@@ -116,32 +116,30 @@ export function rollFortune(luck, rng, opts) {
 // Clues
 // ---------------------------------------------------------------------------
 
-// Tells (clues). Each exchange the player's reading is compared with the
-// enemy's: reading score = (player's current WIS + FAI stamina) − (enemy's
-// current WIS + FAI stamina) + any reading bonuses (traits, abilities, items).
-// The score sets the odds of seeing no clue, one clue, or both clues:
-//   none: from TELLS.noneHi (big deficit) down to TELLS.noneLo (big lead)
-//   both: from TELLS.bothLo (big deficit) up to TELLS.bothHi (big lead)
-// Smooth S-shaped curves, never 0% and never 100%. Then +1 clue at Luck 20
-// and Luck 40, flat clue bonuses (Focused +1, Dazed −1), at most the step's
-// number of tells, and one fewer at Night.
+// Tells. By default the enemy gives none. A tell needs a source (a trait,
+// ability, or item with a `tell` strength). Each exchange the WIS + FAI
+// comparison decides how often the best source works:
+//   reading score = (player's current WIS + FAI stamina) − (enemy's current
+//   WIS + FAI stamina) + any `read` bonuses
+//   chance the source works = TELLS.workLo … TELLS.workHi on a smooth S-curve,
+//   so a big lead works most exchanges and a big deficit only now and then
+//   (never 0%, never 100%).
+// Strengths: reverse (rules out one option), narrow (rules out two: two
+// options left), exact (names the move). Night lowers a tell one step:
+// exact → narrow, narrow → reverse, reverse → nothing.
 export const TELLS = {
-  noneLo: 0.03, noneHi: 0.9, noneCenter: 2.4,    // score where "none" is halfway
-  bothLo: 0.03, bothHi: 0.95, bothCenter: 12.1,  // score where "both" is halfway
-  scale: 4,                                      // how gently the odds change per point
+  workLo: 0.08, workHi: 0.95,   // chance at a huge deficit / a huge lead
+  center: 0,                    // reading score where the chance is halfway
+  scale: 5,                     // how gently the chance changes per point
 };
-export const CLUE_LUCK = [20, 40];
+export const TELL_LEVEL = { reverse: 1, narrow: 2, exact: 3 };
+export const TELL_NAME = ['none', 'reverse', 'narrow', 'exact'];
 
 const sigmoid = (x) => 1 / (1 + Math.exp(-x));
 
-// Odds of seeing no clue, one clue, or both, for a reading score.
-export function tellOdds(score) {
-  const T = TELLS;
-  const none = T.noneLo + (T.noneHi - T.noneLo) * sigmoid(-(score - T.noneCenter) / T.scale);
-  const both = T.bothLo + (T.bothHi - T.bothLo) * sigmoid((score - T.bothCenter) / T.scale);
-  const total = none + both;
-  const scaleDown = total > 1 ? 1 / total : 1;          // only if the two would overlap
-  return { none: none * scaleDown, one: 1 - (none + both) * scaleDown, both: both * scaleDown };
+// Chance that a tell source works this exchange, for a reading score.
+export function tellWorkChance(score) {
+  return TELLS.workLo + (TELLS.workHi - TELLS.workLo) * sigmoid((score - TELLS.center) / TELLS.scale);
 }
 
 // The reading score before bonuses: player's WIS + FAI stamina minus the enemy's.
@@ -149,17 +147,9 @@ export function readingLead(character, enemyStamina) {
   return (character.attrs.WIS.stamina + character.attrs.FAI.stamina) - (enemyStamina.WIS + enemyStamina.FAI);
 }
 
-// +1 clue at Luck 20 and again at Luck 40.
-export function luckClueBonus(luck) {
-  return CLUE_LUCK.filter(t => luck >= t).length;
-}
-
-// Final clue count from a rolled tier (0, 1, or 2).
-export function cluesShown({ tier, luck = 0, clueBonus = 0, tellCount = 2, night = false }) {
-  let n = tier + luckClueBonus(luck) + clueBonus;
-  n = Math.min(n, tellCount);
-  if (night) n -= 1;
-  return Math.max(0, n);
+// The tell level after Night (0 means no tell).
+export function tellLevelAfterNight(level, night) {
+  return Math.max(0, level - (night ? 1 : 0));
 }
 
 // ---------------------------------------------------------------------------

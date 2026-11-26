@@ -32,15 +32,15 @@
 // Randomness (feints, counter aim, Fortune openings, lucky dice, Pray) goes
 // through the seeded generator stored in combat.rngState.
 
-import { getEnemy, COUNTER } from '../data/enemies.js';
+import { getEnemy } from '../data/enemies.js';
 import { getAbility } from '../data/abilities.js';
 import { getWeapon, WEAPONS, ARMOR, CONSUMABLES } from '../data/items.js';
 import { ABILITIES } from '../data/abilities.js';
 import { TRAITS, PRAY_TPTS } from '../data/traits.js';
 import {
-  ATTRS, attrTotals, luckOf, cluesShown, rollFortune, rollLuckyDice, luckyResult,
+  ATTRS, attrTotals, luckOf, rollFortune, rollLuckyDice, luckyResult,
   computeHit, blockResult, applyDamage, damageCharacter, isDefeated, staminaOf,
-  tellOdds, readingLead, luckClueBonus,
+  tellWorkChance, readingLead, tellLevelAfterNight, TELL_LEVEL, TELL_NAME,
   useAttribute, actionAttribute, isPredictable, tickCooldowns, restoreStamina,
   lowestPool, applyCombatFatigue, wearItem, isBroken, missChance, inReach,
 } from './rules.js';
@@ -81,11 +81,9 @@ export function counterStep(enemy, repeated) {
   return {
     id: 'counter',
     when: 'counter',
-    first: 'counter',
-    caption: COUNTER.caption,
     evenOdds: true,
     variants: targets.map(t => ({
-      id: 'counter-' + t, second: 'counter-' + t,
+      id: 'counter-' + t,
       action: 'attack', weapon: weapon.id, target: t, clash: t, advantage: true,
     })),
   };
@@ -98,10 +96,8 @@ export function blockStep(enemy, kind, target) {
   return {
     id: kind,
     when: kind,
-    first: t.first,
-    caption: t.caption,
     variants: [
-      { id: `${kind}-block-${target}`, second: 'block-' + target, action: 'block', target },
+      { id: `${kind}-block-${target}`, action: 'block', target },
       ...t.feints.map((f, i) => ({ id: `${kind}-feint-${i}`, ...f })),
     ],
   };
@@ -181,19 +177,6 @@ export function variantOdds(enemy, step) {
   if (step.evenOdds) return step.variants.map(() => 1 / n);
   const f = enemy.feintChance;
   return step.variants.map((_, i) => (i === 0 ? 1 - f : f / (n - 1)));
-}
-
-// The words for a clue.
-export function tellText(enemy, id) {
-  if (id === 'counter') return COUNTER.first;
-  if (id.startsWith('counter-')) return COUNTER.second[id.slice(8)];
-  if (id.startsWith('block-')) return enemy.blockTells[id.slice(6)];
-  return enemy.tellText[id];
-}
-
-// Both clues of a variant, in order: the shared first clue, then its own.
-export function variantTells(enemy, step, variant) {
-  return [tellText(enemy, step.first), tellText(enemy, variant.second)];
 }
 
 // For tests and simulations: the same combat with the enemy committed to a
@@ -322,38 +305,82 @@ export function attacksInteract({ playerTarget, enemyTarget, playerSpeed, enemyS
 // Reading the enemy (tells)
 // ---------------------------------------------------------------------------
 
-// Reading bonuses from everything the character has: traits (TPT, TNT, CPT,
-// CNT, PPT, PNT), learned abilities, and equipped items. Each can carry
-// `read` (points on the reading score) and `clues` (a flat change in clues).
-export function readingModifiers(character) {
-  let read = 0, clues = 0;
-  const add = (src) => { if (src) { read += src.read || 0; clues += src.clues || 0; } };
-  for (const t of character.traits || []) add(TRAITS[t.id]);
-  for (const id of character.abilities || []) add(ABILITIES[id]);
+// Tell sources: everything the character has (traits, learned abilities, and
+// equipped items) can be a source by carrying `tell: 'reverse' | 'narrow' |
+// 'exact'`; `blocksTells: true` shuts tells off; `read` adds points to the
+// reading score. The strongest source is the one used.
+export function tellSources(character) {
+  const sources = [];
+  let blocked = false, read = 0;
+  const add = (src, from) => {
+    if (!src) return;
+    if (src.blocksTells) blocked = true;
+    if (src.tell) sources.push({ from, name: src.name || from, strength: src.tell, level: TELL_LEVEL[src.tell] });
+    read += src.read || 0;
+  };
+  for (const t of character.traits || []) add(TRAITS[t.id], t.id);
+  for (const id of character.abilities || []) add(ABILITIES[id], id);
   const g = character.gear || {};
-  for (const id of [...(g.ready || []), ...Object.values(g.armor || {}), g.shield].filter(Boolean)) add(WEAPONS[id] || ARMOR[id]);
-  return { read, clues };
+  for (const id of [...(g.ready || []), ...Object.values(g.armor || {}), g.shield].filter(Boolean)) add(WEAPONS[id] || ARMOR[id], id);
+  sources.sort((a, b) => b.level - a.level);
+  return { sources, best: sources[0] || null, blocked, read };
 }
 
-// This exchange's reading: score = WIS + FAI lead + bonuses (an Enraged enemy
-// is harder to read: −2), and the odds of none / one / both clues.
+// This exchange's reading: the WIS + FAI comparison sets how often the best
+// source works (an Enraged enemy is harder to read: −2); Night lowers its level.
 export const ENRAGED_READ = -2;
 export function readingFor(character, combat) {
-  const mods = readingModifiers(character);
+  const ts = tellSources(character);
   const lead = readingLead(character, combat.enemy.stamina);
-  const score = lead + mods.read + (combat.enemy.enraged ? ENRAGED_READ : 0);
-  return { lead, score, clues: mods.clues, odds: tellOdds(score) };
+  const score = lead + ts.read + (combat.enemy.enraged ? ENRAGED_READ : 0);
+  const night = combat.timeOfDay === 'Night';
+  const level = ts.blocked || !ts.best ? 0 : tellLevelAfterNight(ts.best.level, night);
+  return { lead, score, workChance: tellWorkChance(score), source: ts.best, blocked: ts.blocked, level };
 }
 
-// A plain word for how well the player is reading the enemy right now:
-// expected clues (after Luck, traits, and Night) of 1.25+ is good, under 0.8 poor.
+// A plain word for how well the player is reading the enemy right now.
+// With a working source: good (works 70%+ of exchanges), fair (40%+), or poor.
 export function readingLabel(character, combat) {
   const rd = readingFor(character, combat);
-  const bonus = luckClueBonus(luckOf(character)) + rd.clues;
-  const night = combat.timeOfDay === 'Night' ? 1 : 0;
-  const count = (t) => Math.max(0, Math.min(2, t + bonus) - night);
-  const expected = rd.odds.none * count(0) + rd.odds.one * count(1) + rd.odds.both * count(2);
-  return { label: expected >= 1.25 ? 'good' : expected >= 0.8 ? 'fair' : 'poor', expected, odds: rd.odds };
+  let label;
+  if (rd.blocked) label = 'blocked (Dazed)';
+  else if (!rd.source) label = 'no tells';
+  else if (rd.level === 0) label = 'no tells at Night';
+  else label = rd.workChance >= 0.7 ? 'good' : rd.workChance >= 0.4 ? 'fair' : 'poor';
+  return { label, workChance: rd.workChance, strength: TELL_NAME[rd.level], source: rd.source };
+}
+
+// A tell about the enemy's move. Always true: it rules out spots the move
+// won't strike (reverse: one; narrow: two), or names the move (exact).
+// Returns { level, ruledOut, attacking, exact, text } or null.
+export function moveTell(level, move, rng) {
+  if (level <= 0) return null;
+  const hit = move.action === 'attack' ? move.target : null;
+  if (level >= 3) {
+    const text = move.action === 'attack' ? `It's going for ${YOUR_PART[move.target]}.`
+      : move.action === 'block' ? `It will guard ${ENEMY_PART[move.target]} instead of striking.`
+      : "It's about to throw back its head and howl.";
+    return { level: 3, ruledOut: TARGETS.filter(t => t !== hit), attacking: move.action === 'attack',
+             exact: { action: move.action, target: move.target || null }, text };
+  }
+  const safe = TARGETS.filter(t => t !== hit);
+  const ruledOut = pickDistinct(rng, safe, level).sort((a, b) => TARGETS.indexOf(a) - TARGETS.indexOf(b));
+  if (level === 1) return { level, ruledOut, attacking: null, exact: null, text: `It's avoiding ${YOUR_PART[ruledOut[0]]}.` };
+  const left = TARGETS.filter(t => !ruledOut.includes(t));
+  return hit
+    ? { level, ruledOut, attacking: true, exact: null, text: `It's going for ${YOUR_PART[left[0]]} or ${YOUR_PART[left[1]]}.` }
+    : { level, ruledOut, attacking: false, exact: null, text: `It won't strike ${YOUR_PART[ruledOut[0]]} or ${YOUR_PART[ruledOut[1]]}.` };
+}
+
+// A tell about which way the enemy goes in a Clash (same strengths).
+const DIR_WORD = { head: 'high, at your head', left: 'to your left', right: 'to your right', legs: 'low, at your legs' };
+export function clashTell(level, dir, rng) {
+  if (level <= 0) return null;
+  if (level >= 3) return { level: 3, ruledOut: TARGETS.filter(t => t !== dir), text: `In the Clash it will go ${DIR_WORD[dir]}.` };
+  const ruledOut = pickDistinct(rng, TARGETS.filter(t => t !== dir), level).sort((a, b) => TARGETS.indexOf(a) - TARGETS.indexOf(b));
+  if (level === 1) return { level, ruledOut, text: `In the Clash it won't go ${DIR_WORD[ruledOut[0]]}.` };
+  const left = TARGETS.filter(t => !ruledOut.includes(t));
+  return { level, ruledOut, text: `In the Clash it will go ${DIR_WORD[left[0]]} or ${DIR_WORD[left[1]]}.` };
 }
 
 // ---------------------------------------------------------------------------
@@ -424,18 +451,13 @@ export function beginExchange(character, combatIn) {
   while (pick < odds.length - 1 && r >= odds[pick]) { r -= odds[pick]; pick++; }
   const variant = step.variants[pick];
 
-  // 2. Clues: roll how much the player reads (none, one, or both clues) from
-  //    the WIS + FAI comparison, then apply Luck, traits, and Night.
+  // 2. Tells: none by default. A tell source, if the player has one, works
+  //    with the chance the WIS + FAI comparison gives; Night lowers it a step.
+  //    The caption is always neutral.
   const luck = luckOf(c);
   const reading = readingFor(c, combat);
-  const r2 = rng.next();
-  let tier = r2 < reading.odds.none ? 0 : r2 < reading.odds.none + reading.odds.both ? 2 : 1;
-  if (step.when === 'below50') tier = Math.max(tier, 1);      // the howl is never hidden
-  const all = variantTells(enemy, step, variant);
-  const beforeNight = Math.min(all.length, Math.max(0, tier + luckClueBonus(luck) + reading.clues));
-  const hidden = beforeNight === 0 && tier === 0;            // the enemy gives nothing away
-  const hiddenCaption = hidden ? enemy.hiddenCaptions[Math.floor(rng.next() * enemy.hiddenCaptions.length)] : null;
-  const clueCount = Math.max(0, beforeNight - (combat.timeOfDay === 'Night' ? 1 : 0));
+  const tell = reading.level > 0 && rng.next() < reading.workChance ? moveTell(reading.level, variant, rng) : null;
+  const caption = enemy.neutralCaptions[Math.floor(rng.next() * enemy.neutralCaptions.length)];
 
   const fortuneOpen = rollFortune(luck, rng);
   const hint = fortuneOpen ? enemy.fortuneHints[Math.floor(rng.next() * enemy.fortuneHints.length)] : null;
@@ -445,11 +467,9 @@ export function beginExchange(character, combatIn) {
     step,
     variantId: variant.id,
     options,
-    hidden,
-    caption: hidden ? hiddenCaption : step.caption,
-    tells: all.slice(0, clueCount),
-    tellCount: all.length,
-    usedFocus: hasTrait(c, 'focused'),
+    caption,
+    tell,
+    tells: tell ? [tell.text] : [],
     fortune: { open: fortuneOpen, hint },
   };
   combat.rngState = rng.getState();
@@ -519,8 +539,6 @@ export function submitAction(characterIn, combatIn, choice) {
   c = useAttribute(c, attr);
   P.usage[attr] += 1;
 
-  // Focused is used up by the exchange it helped.
-  if (cb.current.usedFocus) removeTrait(c, 'focused');
 
   // Lucky attempt: only when a Fortune opening is showing (not on a Block).
   let lucky = null;
@@ -595,11 +613,15 @@ export function submitAction(characterIn, combatIn, choice) {
         const others = TARGETS.filter(t => t !== usual);
         enemyDir = others[Math.floor(rng.next() * others.length)];
       }
+      // Clash tells follow the same rule: only from a source.
+      const rd = readingFor(c, cb);
+      const ctell = rd.level > 0 && rng.next() < rd.workChance ? clashTell(rd.level, enemyDir, rng) : null;
       cb.pendingClash = {
         enemyDir,
         usualDir: usual,
-        caption: step.caption,
-        tells: cb.current.tells,
+        caption: cb.current.caption,
+        tell: ctell,
+        tells: ctell ? [ctell.text] : [],
         abilityId: ability ? ability.id : null,
         lucky,
         // What each side's attack would do if it wins the Clash.
@@ -705,7 +727,11 @@ function resolvePlayer(ctx, o) {
     const pool = PRAY_TPTS.filter(id => !owned.has(id));
     const count = Math.min(5, (o.enemyOffensive ? 1 : 2) * mult);
     const got = pickDistinct(ctx.rng, pool, count);
-    for (const id of got) ctx.c.traits.push({ id, kind: 'TPT', source: 'pray', expires: 'used' });
+    for (const id of got) {
+      const def = TRAITS[id];
+      ctx.c.traits.push(def.duration ? { id, kind: 'TPT', source: 'pray', left: def.duration, gainedAt: cb.exchange }
+                                     : { id, kind: 'TPT', source: 'pray', expires: 'used' });
+    }
     lines.push(got.length
       ? `You pray. You feel ${got.map(id => TRAITS[id].name).join(' and ')}.`
       : 'You pray, already blessed in every way you can be.');
@@ -885,6 +911,12 @@ function cleanup(ctx) {
 
   c.cooldowns = tickCooldowns(c.cooldowns);
   if (ability) c.cooldowns[ability.id] = ability.cooldown;
+
+  // Combat traits with a duration (Focused) count down each exchange after
+  // the one they were gained in.
+  c.traits = c.traits
+    .map(t => (t.left !== undefined && t.gainedAt !== k ? { ...t, left: t.left - 1 } : t))
+    .filter(t => t.left === undefined || t.left > 0);
 
   P.conditions = P.conditions.filter(x => x.until > k);
   E.conditions = E.conditions.filter(x => x.until > k);
