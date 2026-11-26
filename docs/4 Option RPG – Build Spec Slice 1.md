@@ -37,7 +37,7 @@ Plain HTML, CSS, and JavaScript with no build step or dependencies, mobile-first
 
 - One `state` object is the single source of truth; screens only read it and call engine functions.
 - Engine functions are pure where possible (state in, state out), so rules can be unit-tested without the UI.
-- The only randomness is in race and occupation offers, Prayer's TPT, Fortune openings, lucky dice, enemy feints (main move or feint at each pattern step), whether an enemy flinches or guards, whether it hides its intent (and which neutral caption it shows), where an enemy's counter aims, and whether an attack misses by chance. All of it goes through one seeded random function so a run can be replayed.
+- The only randomness is in race and occupation offers, Prayer's TPT, Fortune openings, lucky dice, enemy feints (main move or feint at each pattern step), whether an enemy flinches or guards, whether it hides its intent (and which neutral caption it shows), where an enemy's counter aims, which way it goes in a Clash, and whether an attack misses by chance. All of it goes through one seeded random function so a run can be replayed.
 - Autosave to local storage after every event and every exchange.
 - A **Display** setting switches between the Text and Graphic versions of every screen.
 
@@ -201,7 +201,7 @@ Each exchange runs the same eight steps, in this order.
 3. **Player chooses.** Action (Pray, Attack, Block, Item, or an ability from the carousel), then a target (Head, Left, Right, Legs) for attacks and blocks. Tapping the Fortune star, then holding the action, attaches a lucky attempt when an opening is showing.
 4. **Order by speed.** Basic Attacks use the weapon's speed and abilities their listed speed; Hindered and Speed advantage shift one tier. The slower side takes Disadvantage.
 5. **Attacks meet.** Two attacks meet when their speeds are equal or one step apart (Swift and Fair, Fair and Drawn); Swift and Drawn never meet. When they meet: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance, but only if both are hard weapons (blades, hafts, gauntlets, shields); if either is a natural weapon (claws, bites, fists, hand wraps) there is no interaction. The same label (Left vs Left, Head vs Head, Legs vs Legs) starts a Clash with any weapons. Head vs Legs, or a side vs a height, don't interact. In the slice the sword (Fair) meets claws (Swift), bites (Fair), and the greatsword (Drawn); the dagger (Swift) meets claws and bites but never the greatsword.
-6. **Clash event**, if triggered. The enemy's Clash direction comes from the move it committed to; the player sees clues and picks a direction. The winner gets Advantage on the next attack, and the loser becomes Off-Balance. No damage is dealt this exchange.
+6. **Clash event**, if triggered. The enemy's Clash direction usually comes from the move it committed to (its Clash habit: werewolf 90%, barrow knight 78%); otherwise it goes one of the other three ways, by the seeded random function. The player sees clues and picks a direction. The winner's attack lands with its normal damage (weapon, bonus attribute, Advantage or Disadvantage, armor, resist or weak, lucky multipliers, abilities such as Crusher, and traits such as Blessed), can't be Blocked, and can't miss; the loser's attack does not land. Then the winner gets Advantage on their next attack and the loser becomes Off-Balance. Same for the player and enemies.
 7. **Resolve.** In speed order: Blocks covering the attacked target stop the hit; then an attack that isn't Blocked can miss (situational misses first, then the miss chance, rolled with the seeded random function; shown as "Your sword swings wide."); anything else deals damage (weapon tier + attribute bonus, then Advantage or Disadvantage, armor, resist or weak, overflow). A hit carrying a Stagger cancels a slower action that hasn't resolved. Apply TPTs, TNTs, and lucky multipliers or penalties.
 8. **Clean up.** Tick cooldowns, clear one-exchange conditions (Off-Balance, Hindered), advance the enemy's pattern, autosave, and check for defeat.
 
@@ -257,29 +257,31 @@ Stamina, damage, feint, hiding, flinch, and guard chances were tuned by simulati
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| Learned player wins | 87% | 86% |
-| Winners usually keep | 42% of total stamina (middle half 23–62%) | 62% (middle half 42–69%) |
-| Scrapes (under 20% left) | 22% of wins | 9% of wins |
-| Wins costing 40–70% | 38% | 30% |
-| Flawless (under 10% lost) | 4% | 5% |
-| Fight length | 14 exchanges (middle half 11–15) | 18 exchanges (middle half 12–19) |
-| Clues during fights | none 27%, one 52%, both 21% | none 23%, one 49%, both 28% |
-| Attacks that miss | 26% in all: 5% by chance, 21% situational (mostly an Off-Balance enemy after the player wins a Clash) | 24%: 4% by chance, 21% situational |
+| Learned player wins | 86% | 87% |
+| Winners usually keep | 54% of total stamina (middle half 31–73%) | 65% (middle half 50–81%) |
+| Scrapes (under 20% left) | 17% of wins | 6% of wins |
+| Wins costing 40–70% | 44% | 28% |
+| Flawless (under 10% lost) | 7.5% | 9% |
+| Fight length | 10 exchanges (middle half 9–12) | 16 exchanges (middle half 12–19) |
+| Clashes per fight (learned) | 4.1, player wins 90% | 6.3, player wins 78% |
+| Attacks that miss | 21%: 5% by chance, the rest situational | 22%: 3% by chance, 19% situational |
 | Random buttons win | 0% | 0% |
-| Learned player at Night | 73% | 56% |
+
+Known shortfalls: wins are less costly than the targets (too few scrapes, too many flawless wins), most of all against the knight, because a careful player can force a Clash on almost every knight swing and wins most of them.
 
 The random-button target is not met: with these rules a player choosing at random loses almost every fight (random targets, blind Blocks, lost Clashes leaving it Off-Balance, and, against the knight, a dagger that can't reach). Making the enemies weak enough for random play to win 15–30% makes a pattern-reading player win nearly every fight unhurt. This is an open design question.
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| STR / AGI / WIS / FAI | 9 / 9 / 3 / 2 | 10 / 2 / 4 / 0 |
-| Damage bonus | +2 to every hit | +3 to every hit |
+| STR / AGI / WIS / FAI | 9 / 9 / 3 / 2 | 13 / 3 / 4 / 0 |
+| Damage bonus | +3 to every hit | +1 to every hit |
+| Clash habit (goes its pattern's Clash direction) | 90% | 78% |
 | Feint chance | 47% | 48% |
 | Luck (for misses) | 6 | 6 |
 | WIS + FAI (for tells) | 3 + 2 = 5 | 4 + 0 = 4 |
 | Neutral captions | “It watches you.” · “It paces, giving nothing away.” | “The knight stands still.” · “Its visor gives nothing away.” |
-| Flinch | 50% after a hit of 3 or more | 70% after a hit of 3 or more (rare: its armor soaks most hits) |
-| Guard | 35% when you keep striking one spot | 65% when you keep striking one spot |
+| Flinch | 50% after a hit of 3 or more | 35% after a hit of 3 or more (rare: its armor soaks most hits) |
+| Guard | 35% when you keep striking one spot | 40% when you keep striking one spot |
 | Range | Close | Approach |
 | Weapons | Claws (Swift, Light, drains AGI); Bite (Fair, Medium, drains STR); both natural: they Clash but never Clank | Greatsword (Drawn, Heavy, drains STR); hard: it can Clank |
 | Armor | None | Heavy head and body, Medium legs |

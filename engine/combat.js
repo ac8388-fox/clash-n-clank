@@ -9,7 +9,8 @@
 //   4. Order by speed    – submitAction()
 //   5. Attacks meet      – submitAction()  (Clank, Clash, or no interaction;
 //                          speeds equal or one step apart; only hard weapons Clank)
-//   6. Clash event       – submitClash()   (only if step 5 started a Clash)
+//   6. Clash event       – submitClash()   (only if step 5 started a Clash:
+//                          the winner's attack lands, the loser's doesn't)
 //   7. Resolve           – submitAction()  (Blocks, then misses, then damage)
 //   8. Clean up          – cleanup(), then the next exchange begins
 // After the fight, finishCombat() applies combat fatigue.
@@ -388,7 +389,8 @@ export function startCombat(character, enemyId, { seed = 1, timeOfDay = 'Morning
     },
     current: null,
     pendingClash: null,
-    stats: { playerAttacks: 0, playerMisses: 0, enemyAttacks: 0, enemyMisses: 0, chanceMisses: 0, situationalMisses: 0 },
+    stats: { playerAttacks: 0, playerMisses: 0, enemyAttacks: 0, enemyMisses: 0, chanceMisses: 0, situationalMisses: 0,
+             clashWins: 0, clashLosses: 0 },
     log: [`${enemy.name}: “${enemy.line}”`],
     outcome: null,
   };
@@ -585,12 +587,24 @@ export function submitAction(characterIn, combatIn, choice) {
     }
     if (meet === 'clash') {
       lines.push('CLASH! Your attacks meet. Read its next move and pick a direction.');
+      // The enemy usually goes its pattern's Clash direction (clashHabit), but
+      // not always: otherwise one of the other three, by the seeded random function.
+      const usual = mv.clash || mv.target;
+      let enemyDir = usual;
+      if (rng.next() >= (enemy.clashHabit ?? 1)) {
+        const others = TARGETS.filter(t => t !== usual);
+        enemyDir = others[Math.floor(rng.next() * others.length)];
+      }
       cb.pendingClash = {
-        enemyDir: mv.clash || mv.target,
+        enemyDir,
+        usualDir: usual,
         caption: step.caption,
         tells: cb.current.tells,
         abilityId: ability ? ability.id : null,
         lucky,
+        // What each side's attack would do if it wins the Clash.
+        playerTarget: choice.target, playerAttackMod, pSpeed, eSpeed,
+        enemyTarget: mv.target, enemyWeapon: mv.weapon, enemyAttackMod,
       };
       cb.rngState = rng.getState();
       cb.log.push(...lines);
@@ -658,13 +672,13 @@ function resolvePlayer(ctx, o) {
       abilityMultiplier: o.ability && o.ability.multiplier ? o.ability.multiplier : 1, luckyMultiplier: mult,
     });
     let blocked = false;
-    if (mv.action === 'block' && mv.target === o.target) {
+    if (!o.clashWin && mv.action === 'block' && mv.target === o.target) {
       const br = blockResult(dmg, o.enemyBlockMod);
       dmg = br.taken;
       blocked = true;
       if (dmg === 0) lines.push(`It blocks ${what}.`);
     }
-    if (dmg > 0 && !blocked) {
+    if (dmg > 0 && !blocked && !o.clashWin) {
       cb.stats.playerAttacks += 1;
       const miss = playerMisses(ctx, o);
       if (miss) {
@@ -829,17 +843,33 @@ export function submitClash(characterIn, combatIn, direction) {
                 lines, rng: createRng(cb.rngState), lucky: pc.lucky };
   cb.pendingClash = null;
 
+  // The winner's attack lands with its normal damage and can't miss (they
+  // won the Clash); the loser's attack doesn't land. Then the winner gets
+  // Advantage on their next attack and the loser becomes Off-Balance.
   if (direction === pc.enemyDir) {
+    cb.stats.clashWins += 1;
+    lines.push('You read it and win the Clash!');
+    const weapon = currentWeapon(ctx.c, cb.player);
+    resolvePlayer(ctx, {
+      action: ctx.ability ? 'ability' : 'attack', weapon, ability: ctx.ability, target: pc.playerTarget,
+      pSpeed: pc.pSpeed, eSpeed: pc.eSpeed, playerAttackMod: pc.playerAttackMod, clashWin: true,
+    });
     cb.player.advantageNext = true;
     addCondition(cb.enemy, 'offBalance', cb.exchange);
-    lines.push('You read it and win the Clash! Advantage on your next attack; it is Off-Balance.');
+    lines.push('Advantage on your next attack; it is Off-Balance.');
   } else {
+    cb.stats.clashLosses += 1;
+    lines.push(`It wins the Clash (it went ${pc.enemyDir}).`);
+    resolveEnemy(ctx, {
+      weaponId: pc.enemyWeapon, target: pc.enemyTarget, enemyAttackMod: pc.enemyAttackMod,
+      playerBlocking: null, free: true,
+    });
     cb.enemy.advantageNext = true;
-    lines.push(`It wins the Clash (it went ${pc.enemyDir}). It has Advantage on its next attack.`);
+    lines.push('It has Advantage on its next attack.');
     playerGainsTNT(ctx.c, cb, 'offBalance', lines);
+    if (ctx.ability) afterAbility(ctx);       // a won Clash runs the ability's effect in resolvePlayer
   }
   if (pc.lucky && !pc.lucky.success) playerGainsTNT(ctx.c, cb, 'offBalance', lines);
-  if (ctx.ability) afterAbility(ctx);
   return cleanup(ctx);
 }
 

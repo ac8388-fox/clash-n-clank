@@ -346,7 +346,7 @@ Two attacks meet when their speeds are equal or one step apart (Swift and Fair, 
 - A successful lucky attempt never misses. Fortune's Favor (Bard) turns one miss into a hit, once per Rest.
 - Misses roll through the same seeded random function as everything else, so a fight can be replayed.
 
-**Clash event:** the enemy has already chosen a direction by its pattern. The player gets indirect clues, scaled by WIS, FAI, Luck, traits, and abilities, and picks a direction. A correct pick gives Advantage on the next attack and inflicts an extra TNT; a wrong one hands those to the enemy. Blocks and evades use the same prediction.
+**Clash event:** the enemy has already chosen a direction: usually the one its pattern gives that move, but not always (each enemy has a habit; otherwise it goes one of the other three ways). The player gets indirect clues, scaled by WIS, FAI, Luck, traits, and abilities, and picks a direction. The winner's attack lands with its normal damage (weapon, bonus attribute, armor, traits and abilities that change damage, and all the usual rules), draining the loser's stamina the usual way; it can't miss, because they won the Clash. The loser's attack does not land. The winner also gets Advantage on their next attack, and the loser gains a TNT (Off-Balance). It works the same way for the player and for enemies. Blocks and evades use the same prediction.
 
 **Conditions and states**
 

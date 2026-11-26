@@ -145,7 +145,9 @@ function guardRisk(combat, ch) {
   return (enemy.guardChance || 0) * 2 / Math.max(1, total(combat.enemy.stamina));
 }
 
-export const learnedClash = (combat) => guessClash(possibleMoves(combat));
+// In a Clash the player knows the enemy's move (it attacked the same spot),
+// so a pattern-knowing player goes with its usual Clash direction.
+export const learnedClash = (combat) => combat.pendingClash.usualDir || guessClash(possibleMoves(combat));
 
 // A player pressing buttons at random.
 export function randomPolicy(rng) {

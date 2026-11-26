@@ -32,7 +32,9 @@
 // attack at it that isn't faster than that move misses.
 //
 // All randomness uses the seeded random function, so a fight can be replayed.
-// clash is the direction the enemy picks if that variant's attack starts a Clash.
+// clash is the direction the enemy usually picks if that variant's attack
+// starts a Clash; clashHabit is how often it sticks to it (otherwise it goes
+// one of the other three directions, by the seeded random function).
 // art is the picture's file name in assets/house/ and assets/full/.
 
 export const ENEMIES = {
@@ -43,9 +45,10 @@ export const ENEMIES = {
     range: 'Close',
     line: 'Grrrhh…',
     attrs: { STR: 9, AGI: 9, WIS: 3, FAI: 2 },
-    damageBonus: 2,
+    damageBonus: 3,
     feintChance: 0.47,
     luck: 6,
+    clashHabit: 0.9,
     hiddenCaptions: ['It watches you.', 'It paces, giving nothing away.'],
     hardHit: 3,
     flinchChance: 0.5,
@@ -136,14 +139,15 @@ export const ENEMIES = {
     art: 'barrow-knight',
     range: 'Approach',
     line: 'Turn back.',
-    attrs: { STR: 10, AGI: 2, WIS: 4, FAI: 0 },
-    damageBonus: 3,
+    attrs: { STR: 13, AGI: 3, WIS: 4, FAI: 0 },
+    damageBonus: 1,
     feintChance: 0.48,
     luck: 6,
+    clashHabit: 0.78,
     hiddenCaptions: ['The knight stands still.', 'Its visor gives nothing away.'],
     hardHit: 3,
-    flinchChance: 0.7,
-    guardChance: 0.65,
+    flinchChance: 0.35,
+    guardChance: 0.4,
     weapons: ['greatsword'],
     armor: { head: 'Heavy', body: 'Heavy', legs: 'Medium' },
     resist: {},
