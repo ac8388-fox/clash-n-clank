@@ -1,9 +1,11 @@
 // Combat (Build Spec → "Combat resolution", "Interface implementation").
-// Carousel page 1: Pray (up), Attack (right), Block (down), Item (left);
-// abilities fill later pages four at a time; spent abilities stay in place,
-// greyed, showing their reset. Choosing Attack, Block, or an attacking
-// ability turns the diamond into Head, Left, Right, Legs. A Clash opens a
-// full-screen CLASH prompt with the four directions.
+// Carousel page 1: Pray (up), the weapon's main attack (right), Block (down),
+// Item (left). Page 2: the weapon's other three attacks, each on the side it
+// hits. Later pages: abilities four at a time, each on its side where free;
+// spent abilities stay in place, greyed, showing their reset. Every attack
+// and ability has its own target; only Block turns the diamond into Head,
+// Left, Right, Legs. Out of reach, attacks show "can't reach" (greyed). A
+// Clash opens a full-screen CLASH prompt with the four directions.
 //
 // The caption is always neutral; tells (clue chips, reverse style) appear only
 // when a tell source gives one. Result lines show hits, misses, Clanks,
@@ -16,11 +18,10 @@
 import { getEnemy } from '../data/enemies.js';
 import { ENEMY_ART } from '../data/enemyArt.js';
 import { getAbility } from '../data/abilities.js';
-import { getWeapon } from '../data/items.js';
 import { TRAITS } from '../data/traits.js';
 import { availableActions } from '../engine/combat.js';
 import { ATTRS } from '../engine/rules.js';
-import { statsFor, resultLines, ATTR_WORD, HOLD_HELP } from './common.js';
+import { statsFor, resultLines, HOLD_HELP } from './common.js';
 
 const DIRS = ['up', 'right', 'down', 'left'];
 const TARGET = { up: 'head', left: 'left', right: 'right', down: 'legs' };
@@ -28,8 +29,21 @@ const TARGET_LABEL = { head: 'Head', left: '‹ Left', right: 'Right ›', legs:
 const TARGET_ICON = { head: 'head', left: 'left', right: 'right', legs: 'legs' };
 const sum = (m) => ATTRS.reduce((s, k) => s + m[k], 0);
 
+// Page 1 (Pray, main attack, Block, Item), page 2 (the weapon's other three
+// attacks), then the abilities four at a time.
 export function pageCount(character) {
-  return 1 + Math.ceil(character.abilities.filter(id => !getAbility(id).passive).length / 4);
+  return 2 + Math.ceil(character.abilities.filter(id => !getAbility(id).passive).length / 4);
+}
+
+const DIR_OF = { head: 'up', left: 'left', right: 'right', legs: 'down' };
+const SPOT = { head: 'Head', left: 'Left', right: 'Right', legs: 'Legs' };
+// A weapon attack as a button: its name, where it hits, its speed (and −1 if it hits lighter).
+function attackButton(a, act) {
+  return {
+    label: a.name, icon: TARGET_ICON[a.target], zone: a.target, enabled: a.enabled,
+    sub: a.reach ? `${SPOT[a.target]} · ${a.speed}${a.damage ? ` · ${a.damage}` : ''}` : 'can’t reach',
+    run: () => act.fight({ action: 'attack', attackId: a.id }),
+  };
 }
 
 // Short status: conditions and blessings that matter this exchange.
@@ -89,7 +103,7 @@ export function combatView(ctx) {
       sprite: `${e.art}-sprite`, box: ea.box, zones: ea.zones,
       health: sum(cb.enemy.stamina) / sum(cb.enemy.totals),
       enraged: !!cb.enemy.enraged,
-      targeting: !!clash || !!(ui.pending && ['attack', 'block', 'ability'].includes(ui.pending.action)),
+      targeting: !!clash,
       ruledOut: tell ? tell.ruledOut : [],
       safe: tell && tell.level === 1 ? tell.ruledOut[0] : null,
       fx: ui.fx || null,
@@ -103,44 +117,58 @@ export function combatView(ctx) {
     v.top = [];
     v.bottom = [...results];
     v.diamond = {};
-    for (const d of DIRS) v.diamond[d] = { label: TARGET_LABEL[TARGET[d]], icon: TARGET_ICON[TARGET[d]], run: () => act.clash(TARGET[d]) };
+    for (const d of DIRS) v.diamond[d] = { label: TARGET_LABEL[TARGET[d]], icon: TARGET_ICON[TARGET[d]], zone: TARGET[d], run: () => act.clash(TARGET[d]) };
     v.helper = HOLD_HELP();
+    if (v.enemy) v.enemy.zoneRun = Object.fromEntries(DIRS.map(d => [TARGET[d], v.diamond[d].run]));
     return v;
   }
 
-  if (ui.pending) {
-    const what = ui.pending.action === 'block' ? 'Block' : ui.pending.action === 'attack' ? 'Attack' : getAbility(ui.pending.abilityId).name;
-    v.diamond = {};
-    for (const d of DIRS) v.diamond[d] = { label: TARGET_LABEL[TARGET[d]], icon: TARGET_ICON[TARGET[d]], run: () => act.fight({ ...ui.pending, target: TARGET[d] }) };
-    v.center = { html: `${what}<br>where?` };
-    v.helper = HOLD_HELP();
-    return v;
-  }
-
+  // Only Block asks where; every attack and ability has its own target.
   const acts = availableActions(c, cb);
+  if (ui.pending && ui.pending.action === 'block') {
+    v.diamond = {};
+    for (const d of DIRS) v.diamond[d] = { label: TARGET_LABEL[TARGET[d]], icon: TARGET_ICON[TARGET[d]], zone: TARGET[d], run: () => act.fight({ action: 'block', target: TARGET[d] }) };
+    v.center = { html: 'Block<br>where?' };
+    v.helper = HOLD_HELP();
+    if (v.enemy) { v.enemy.targeting = true; v.enemy.zoneRun = Object.fromEntries(DIRS.map(d => [TARGET[d], v.diamond[d].run])); }
+    return v;
+  }
+
   const n = pageCount(c);
   v.dots = { n, i: ui.page };
+  v.diamond = {};
   if (ui.page === 0) {
-    const [pray, attack, block, item] = acts.page1;
-    const weapon = acts.weapon ? getWeapon(c.gear.ready[cb.player.weaponIndex]) : null;
+    const [pray, , block, item] = acts.page1;
+    const main = acts.attacks.find(a => a.main);
     v.diamond = {
       up: { label: 'Pray', sub: 'Faith', icon: 'FAI', enabled: pray.enabled, run: () => act.fight({ action: 'pray' }) },
-      right: { label: 'Attack', sub: weapon ? `${weapon.name} · ${ATTR_WORD[weapon.drains]}` : 'no weapon', icon: 'STR', enabled: attack.enabled, run: () => act.pend({ action: 'attack' }) },
-      down: { label: 'Block', sub: 'Wisdom', icon: 'block', enabled: block.enabled, run: () => act.pend({ action: 'block' }) },
+      right: main ? attackButton(main, act) : { label: 'Attack', sub: 'no weapon', icon: 'STR', enabled: false },
+      down: { label: 'Block', sub: 'Wisdom · where?', icon: 'block', enabled: block.enabled, run: () => act.pend({ action: 'block' }) },
       left: { label: 'Item', sub: item.enabled ? `Draught ×${item.detail.split('×')[1]}` : 'none left', icon: 'item', enabled: item.enabled, run: () => act.fight({ action: 'item' }) },
     };
-    v.center = { text: 'Choose your action' };
+  } else if (ui.page === 1) {
+    // The weapon's other three attacks, each on the side it hits.
+    for (const a of acts.attacks.filter(x => !x.main)) v.diamond[DIR_OF[a.target]] = attackButton(a, act);
   } else {
-    v.diamond = {};
-    acts.abilities.slice((ui.page - 1) * 4, ui.page * 4).forEach((a, i) => {
+    // Abilities, four at a time, each on the side it hits where that side is free.
+    const list = acts.abilities.slice((ui.page - 2) * 4, (ui.page - 1) * 4);
+    for (const a of list) {
+      const want = a.target ? DIR_OF[a.target] : null;
+      const d = want && !v.diamond[want] ? want : DIRS.find(x => !v.diamond[x]);
       const spent = a.cooldownLeft > 0 || a.winded;
-      v.diamond[DIRS[i]] = {
-        label: a.name, icon: a.id === 'crusher' ? 'hammer' : 'swap', dashed: spent,
-        sub: a.winded ? 'Winded' : a.cooldownLeft ? `ready in ${a.cooldownLeft}` : a.speed,
-        enabled: a.enabled, run: () => act.pend({ action: 'ability', abilityId: a.id }),
+      v.diamond[d] = {
+        label: a.name, icon: a.id === 'crusher' ? 'hammer' : 'swap', dashed: spent, zone: a.target, enabled: a.enabled,
+        sub: a.winded ? 'Winded' : a.cooldownLeft ? `ready in ${a.cooldownLeft}` : !a.reach ? 'can’t reach'
+          : `${a.target ? SPOT[a.target] + ' · ' : ''}${a.speed}`,
+        run: () => act.fight({ action: 'ability', abilityId: a.id }),
       };
-    });
-    v.center = { text: 'Choose your action' };
+    }
+  }
+  v.center = { text: 'Choose your action' };
+  // Graphic: hold a part of the enemy to strike it with the weapon's attack aimed there.
+  if (v.enemy) {
+    v.enemy.zoneRun = {};
+    for (const a of acts.attacks) if (a.enabled) v.enemy.zoneRun[a.target] = () => act.fight({ action: 'attack', attackId: a.id });
   }
   return v;
 }

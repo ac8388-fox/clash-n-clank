@@ -1,14 +1,17 @@
 // Balance report: simulate many fights and print the difficulty measures.
-// Run on a computer: node tests/balance.js [fights per enemy, default 1200] [--extra]
+// Run on a computer: node tests/balance.js [fights per enemy, default 1200] [--expert] [--quick]
 //
-// Targets (Build Spec → Enemies):
-//   learned player: wins about 80–90%; about 1 win in 4 is a scrape (under 20%
-//   of total stamina left); most wins cost 40–70% of total stamina; flawless
-//   wins (under 10% lost) less than 1 in 20; fights last about 10–20 exchanges.
-//   random buttons: win about 15–30%, usually barely.
-//   Attacks miss about 1 time in 15.
+// Targets (Build Spec → Enemies), for a Human Fighter with Plan B, starting
+// both at full stamina and after a typical trial:
+//   attentive player (knows only what is on screen, best choice ~75%):
+//     wins 75–85%; about 1 win in 4 a scrape (under 20% of total stamina
+//     left); flawless wins (under 10% lost) under 1 in 20;
+//   new player (doesn't know the patterns): wins 35–55%;
+//   random buttons: wins 10–25%;
+//   fights last about 10–20 exchanges.
 
-import { simulateFight, learnedPolicy, learnedClash, randomPolicy, randomClash, practiceFighter, createRng } from './sim.js';
+import { simulateFight, learnedPolicy, learnedClash, randomPolicy, randomClash, practiceFighter, createRng,
+         attentivePlayer, newPlayer, randomPlayer, expertPlayer, afterTrial } from './sim.js';
 
 const isNode = typeof process !== 'undefined' && !!process.argv;
 const N = (isNode && Number(process.argv[2])) || 1200;
@@ -42,36 +45,42 @@ export function summarize(res) {
   };
 }
 
-function run(enemyId, label, make) {
+function run(enemyId, label, make, quiet = false) {
   const res = [];
   for (let seed = 1; seed <= N; seed++) res.push(make(seed));
   const s = summarize(res);
-  console.log(`${enemyId.padEnd(13)} ${label.padEnd(30)} wins ${pct(s.winRate).padStart(6)} | winners keep ${pct(s.leftMedian)} ` +
-    `(middle half ${pct(s.leftQ1)}–${pct(s.leftQ3)}) | scrapes ${pct(s.scrape)}, cost 40–70% ${pct(s.costly)}, flawless ${pct(s.flawless)} ` +
-    `| ${s.avgLen.toFixed(1)} exchanges (middle half ${s.lenQ1}–${s.lenQ3}) | misses ${pct(s.missRate)} (by chance ${pct(s.chanceMissRate)}, situational ${pct(s.situationalMissRate)}; you ${pct(s.playerMissRate)}, it ${pct(s.enemyMissRate)}) ` +
-    `| tells in ${pct(s.tellRate)} of exchanges (Focused ${pct(s.focusedRate)}, prays ${pct(s.prayRate)}), blocks ${pct(s.enemyBlocks)}, Clanks ${s.clanks.toFixed(2)}, Clashes ${s.clashes.toFixed(2)} per fight (you win ${pct(s.clashWinShare)})`);
+  if (!quiet) console.log(`${enemyId.padEnd(13)} ${label.padEnd(26)} wins ${pct(s.winRate).padStart(6)} | keep ${pct(s.leftMedian)} ` +
+    `(${pct(s.leftQ1)}–${pct(s.leftQ3)}) | scrapes ${pct(s.scrape)}, flawless ${pct(s.flawless)} ` +
+    `| ${s.avgLen.toFixed(1)} exchanges (${s.lenQ1}–${s.lenQ3}) | misses ${pct(s.missRate)} ` +
+    `| tells ${pct(s.tellRate)}, prays ${pct(s.prayRate)}, blocks ${pct(s.enemyBlocks)}, Clanks ${s.clanks.toFixed(2)}, Clashes ${s.clashes.toFixed(2)} (you win ${pct(s.clashWinShare)})`);
   return s;
+}
+
+export const PLAYERS = {
+  attentive: (seed) => attentivePlayer(createRng(seed * 7907)),
+  new: (seed) => newPlayer(createRng(seed * 7919)),
+  random: (seed) => randomPlayer(createRng(seed * 7937)),
+  expert: () => expertPlayer(),
+};
+export const STARTS = { full: (c) => c, 'after trial': afterTrial };
+
+export function measure(enemyId, playerName, startName, n = N) {
+  const res = [];
+  for (let seed = 1; seed <= n; seed++) {
+    res.push(simulateFight({ seed, enemyId, player: PLAYERS[playerName](seed), character: STARTS[startName](practiceFighter()) }));
+  }
+  return summarize(res);
 }
 
 const isMain = isNode && process.argv[1] && process.argv[1].endsWith('balance.js');
 if (isMain) {
+  const names = ['attentive', 'new', 'random', ...(process.argv.includes('--expert') ? ['expert'] : [])];
   for (const enemyId of ['werewolf', 'barrowKnight']) {
-    run(enemyId, 'learned, Human Fighter', (seed) =>
-      simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash }));
-    run(enemyId, 'random buttons, Human Fighter', (seed) => {
-      const rng = createRng(seed * 7919);
-      return simulateFight({ seed, enemyId, policy: randomPolicy(rng), clashPick: randomClash(rng) });
-    });
-    if (process.argv.includes('--extra')) {
-      run(enemyId, 'learned, WIS+FAI 20 (2 clues)', (seed) => {
-        const c = practiceFighter();
-        c.attrs.WIS.natural = 14; c.attrs.WIS.stamina = 14;
-        return simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash, character: c });
-      });
-      run(enemyId, 'learned, Human, Night', (seed) =>
-        simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash, timeOfDay: 'Night' }));
-      run(enemyId, 'learned, Human, Crusher', (seed) =>
-        simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash, character: practiceFighter('crusher') }));
+    for (const start of Object.keys(STARTS)) {
+      for (const p of names) {
+        run(enemyId, `${p}, ${start}`, (seed) =>
+          simulateFight({ seed, enemyId, player: PLAYERS[p](seed), character: STARTS[start](practiceFighter()) }));
+      }
     }
   }
 }

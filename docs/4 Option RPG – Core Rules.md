@@ -331,7 +331,7 @@ Combat is simultaneous action with pauses: time stops, the player reads the enem
 - If a character has several sources, the strongest is used. **Dazed** blocks all tells.
 - A player who has learned an enemy's pattern can combine it with a reverse tell to make a good guess (if the pattern says legs or left, and the tell says "It's avoiding your legs," it's going left).
 - The character screen shows how well the character is reading the enemy right now: good, fair, or poor (how often their source works), or no tells.
-2. The player picks an action (Pray, Attack, Block, Item, or an ability) and, for attacks and blocks, a target: Head, Left, Right, or Legs, always from the player's perspective.
+2. The player picks an action (Pray, one of the weapon's attacks, Block, Item, or an ability). Every attack and ability has its own target (Head, Left, Right, or Legs, always from the player's perspective): each weapon has four attacks, one per spot, differing in speed and damage, and the button says where it hits. Only Block asks where.
 3. Both actions resolve, faster first. A faster attack can stop a slower one only if it carries a trait, such as a Stagger; the slower action takes a disadvantage.
 
 **Pray:** gain one random combat TPT, or two if the enemy didn't attack or use an offensive item or ability that exchange.
@@ -415,7 +415,7 @@ The screen is a tall vertical diamond of four choices under a text-and-pixel-art
 
 **Carousel**
 
-- Page 1 is always Pray, Attack, Block, Item; every combat-usable ability (class, racial, occupation) fills later pages, four at a time, and the loop returns to page 1.
+- Page 1 is always Pray (up), the weapon's main attack (right), Block (down), Item (left); page 2 holds the weapon's other three attacks, each on the side it hits; every combat-usable ability (class, racial, occupation) fills later pages, four at a time, each on the side it hits where free, and the loop returns to page 1.
 - New abilities are added to the next open slot; outside combat, the player can rearrange them.
 - Spent abilities stay in place, grayed out with their reset condition, so positions never shift.
 - After choosing Attack or Block, the diamond becomes Head, Left, Right, Legs. A choice commits only after a half-second hold, which prevents accidental taps and double clicks; letting go early cancels, and swipe down backs out. For a lucky attempt, tap the glowing Fortune star to arm it, then hold the action.

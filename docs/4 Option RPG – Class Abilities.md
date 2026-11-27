@@ -63,25 +63,27 @@ Fighter is the broad weapon combatant; Gladiator adapts through many weapons and
 
 ### Fighter (STR / STR)
 
-| Lvl | Ability | Speed | Effect |
-| --- | --- | --- | --- |
-| 1 | Plan B | Fair | Basic Attack, then switch weapons; the next action has a Speed disadvantage |
-| 3 | → Follow-up | Fair | Plan B without the Speed disadvantage |
-| 5 | → Contingency | Fair | Follow-up, then enter a Readied stance |
-| 1 | Crusher | Drawn | A stronger attack |
-| 3 | → Punisher | Drawn | Crusher that adds a fitting TNT |
-| 5 | → Devastater | Drawn | Charged attack: Braced while charging (takes 75% damage), more damage, TNT, and Maim; a Stagger cancels the charge |
-| 2 | Disrupt | Swift | Knock a held item from the opponent's hand |
-| 4 | → Despoil | Swift | Disrupt, choosing where the item lands; may equip it |
-| 2 | Feint | Swift | Pick a false and a real direction; the opponent tries to read the deception |
-| 4 | → Deceiver | Swift | Feint that adds a TNT on success |
-| 3 | Retaliate | Fair | Enter a Readied stance: counter if attacked, Advantage on the next attack if not |
-| 5 | → Riposte | Fair | Retaliate that adds a TNT on a successful counter |
-| 3 | Press | Swift | Pressure that can give the enemy's next attack a Speed disadvantage |
-| 5 | → Intimidate | Swift | Press that can inflict Fear or another mental TNT |
-| 4 | Bash | Drawn | Knock the enemy back and break Guards and Blocks |
-| 4 | Exhauster | Fair | A hit puts one available enemy ability on cooldown |
-| 5 | Against All Odds | Fair | Mastery: reset Fighter cooldowns, pre-pick four actions over three exchanges (Drawn only last); successes stack Speed advantage, TPTs, and a final killing strike; first failure loses the stack, second ends it Off-Balance; failure leaves the Fighter Exhausted with all stamina at 1; victory means passing out and a forced Rest or Sleep |
+Every attack has its own target; only Block asks where (*Core Rules* → Combat).
+
+| Lvl | Ability | Speed | Target | Effect |
+| --- | --- | --- | --- | --- |
+| 1 | Plan B | Fair | Main attack of the weapon in hand | Basic Attack, then switch weapons; the next action has a Speed disadvantage |
+| 3 | → Follow-up | Fair | Main attack of the weapon in hand | Plan B without the Speed disadvantage |
+| 5 | → Contingency | Fair | Main attack of the weapon in hand | Follow-up, then enter a Readied stance |
+| 1 | Crusher | Drawn | Head | A stronger attack |
+| 3 | → Punisher | Drawn | Head | Crusher that adds a fitting TNT |
+| 5 | → Devastater | Drawn | Head | Charged attack: Braced while charging (takes 75% damage), more damage, TNT, and Maim; a Stagger cancels the charge |
+| 2 | Disrupt | Swift | Right (the weapon hand) | Knock a held item from the opponent's hand |
+| 4 | → Despoil | Swift | Right (the weapon hand) | Disrupt, choosing where the item lands; may equip it |
+| 2 | Feint | Swift | Its own fake and real directions | Pick a false and a real direction; the opponent tries to read the deception |
+| 4 | → Deceiver | Swift | Its own fake and real directions | Feint that adds a TNT on success |
+| 3 | Retaliate | Fair | None (stance; the counter hits where it was attacked) | Enter a Readied stance: counter if attacked, Advantage on the next attack if not |
+| 5 | → Riposte | Fair | None (stance; the counter hits where it was attacked) | Retaliate that adds a TNT on a successful counter |
+| 3 | Press | Swift | None | Pressure that can give the enemy's next attack a Speed disadvantage |
+| 5 | → Intimidate | Swift | None | Press that can inflict Fear or another mental TNT |
+| 4 | Bash | Drawn | Legs (breaks a Block anywhere) | Knock the enemy back and break Guards and Blocks |
+| 4 | Exhauster | Fair | Main attack of the weapon in hand | A hit puts one available enemy ability on cooldown |
+| 5 | Against All Odds | Fair | None (each pre-picked action has its own) | Mastery: reset Fighter cooldowns, pre-pick four actions over three exchanges (Drawn only last); successes stack Speed advantage, TPTs, and a final killing strike; first failure loses the stack, second ends it Off-Balance; failure leaves the Fighter Exhausted with all stamina at 1; victory means passing out and a forced Rest or Sleep |
 
 ### Gladiator (STR / WIS)
 

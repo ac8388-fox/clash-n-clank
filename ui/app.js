@@ -205,7 +205,7 @@ function currentView() {
 function draw() {
   view = currentView();
   app.dataset.motion = settings.motion;
-  holds = render(app, view, settings.display, { choose, tap, input });
+  holds = render(app, view, settings.display, { choose, tap, input, zone });
 }
 
 function choose(dir) {
@@ -215,6 +215,17 @@ function choose(dir) {
   ui.toast = null;
   if (!['pend'].includes(slot.run.name)) ui.dice = ui.dice && g && g.screen === 'combat' ? ui.dice : null;
   slot.run();
+  save();
+  draw();
+}
+
+// Holding a part of the enemy (Graphic fights): the attack aimed there, a Block there, or a Clash push.
+function zone(z) {
+  if (ui.overlay || ui.busy) return;
+  const run = view.enemy && view.enemy.zoneRun && view.enemy.zoneRun[z];
+  if (!run) return;
+  ui.toast = null;
+  run();
   save();
   draw();
 }

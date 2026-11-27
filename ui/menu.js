@@ -83,7 +83,7 @@ export function mapPanel(world) {
 export function helpPanel() {
   return { kind: 'panel', html: `<h2>Help</h2>
     <h3>Choosing</h3><p>Hold a button for ${esc(holdWords())}; a bar fills inside it. Let go early to cancel. On a computer, hold an arrow key or W A S D.</p>
-    <h3>In a fight</h3><p>Swipe left or right (or Q / E) for more actions. Swipe down (or Esc) to go back. Attack and Block ask where: Head, Left, Right, or Legs.</p>
+    <h3>In a fight</h3><p>Every attack hits its own spot: the button says where (Slash → Right). Page 1 has your weapon's main attack; swipe left or right (or Q / E) for its other three attacks, each on the side it hits, then your abilities. Only Block asks where. In the Graphic displays you can also hold a part of the enemy to strike it there. Swipe down (or Esc) to go back.</p>
     <p>Enemies give nothing away unless something helps you read them (Pray may make you Focused). Learn their patterns.</p>
     <h3>Luck</h3><p>When a ★ appears, tap it (or press L), then hold a choice for a lucky attempt.</p>
     <h3>Corners</h3><p>Bottom left: your character. Bottom right: your inventory. Top left: the map. Top right: this menu.</p>` };

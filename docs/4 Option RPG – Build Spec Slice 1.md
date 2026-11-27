@@ -110,14 +110,17 @@ All content is data, and the engine never hard-codes a race, enemy, or event. At
 
 ```js
 { id, name, speed: 'Drawn'|'Fair'|'Swift', drains: 'STR', cooldown: 2,
-  targets: 'side'|'height'|'any'|'none', effect: 'planB', upgradesTo: ['followUp'] }
+  target: 'head'|'left'|'right'|'legs'|'main'|null, effect: 'planB', upgradesTo: ['followUp'] }
+// target 'main' = the main attack of the weapon in hand; null = no target (a buff or stance)
 ```
 
 **Weapon and armor**
 
 ```js
 { id, name, reach: 'Close'|'Approach'|'Ranged', speed, tier: 'Light'|'Medium'|'Heavy',
-  drains, hands: 1|2, trait, durability: 20 }
+  drains, hands: 1|2, trait, durability: 20,
+  attacks: [ { id, name, target: 'head'|'left'|'right'|'legs', speed, damage: 0|-1, main: true } ] }
+// a player weapon has four attacks, one per spot; the first (main) is on page 1
 { id, name, slot: 'head'|'body'|'hands'|'legs', weight: 'Light'|'Medium'|'Heavy', durability: 20 }
 ```
 
@@ -178,7 +181,8 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Lucky result | No lucky number: the enemy gets a free Basic Attack and you become Off-Balance. Each lucky number adds ×1 to the multiplier (1 = ×2, 2 = ×3) |
 | Cooldowns | Swift 1 exchange, Fair 2, Drawn 3; Mastery and racial ability once per Rest |
 | Pray | One random combat TPT (Focused, Emboldened, Steeled, Blessed, Nimble), or two if the enemy took no offensive action |
-| Predictable | Repeating the same action at the same target two exchanges running: the enemy's next step is a counter, an attack with its fastest weapon and Advantage, aimed at random (never at a target you have been Blocking) |
+| Attacks | Every attack and ability has its own target; only Block asks where. Each player weapon has four attacks, one per spot (see Starting gear), each with its own speed and damage; weapons differ by speed and damage, not by which spots they reach. An attack uses the weapon's attribute. Out of reach (the dagger against the knight at Approach), a weapon's attacks show “can't reach” and can't be chosen; Plan B stays usable, so the player can switch back. Fighter abilities: Plan B (and Follow-up, Contingency, Exhauster) use the main attack of the weapon in hand (Sword → Right, Dagger → Left); Crusher (and Punisher, Devastater) comes down on the Head; Disrupt and Despoil hit the Right (the weapon hand); Bash hits the Legs and breaks a Block anywhere; Feint and Deceiver keep their own two-direction choice; Retaliate, Riposte, Press, Intimidate, and Against All Odds have no target of their own |
+| Predictable | Repeating the same action at the same target two exchanges running (the same attack twice, or Blocking the same spot twice): the enemy's next step is a counter, an attack with its fastest weapon and Advantage, aimed at random (never at a target you have been Blocking) |
 | Trial check | A clean pass, at no cost, if the attribute's current stamina ≥ the requirement. The gap always uses current stamina, so resting first can shrink it |
 | Falling short | Short by 1–3: the player still gets through, but that stamina drops to 0 and they gain a TNT matched to the attribute (STR Winded: no Drawn actions; AGI Bruised: Disadvantage on attacks; WIS Dazed: no tells; FAI Shaken: Disadvantage in Clashes); cleared by Rest (Bruised by Sleep). Steeled ignores the TNT. The options show the cost before the player chooses |
 | Lucky only | Short by 4 or more: the option says “Lucky only” (no dashed border) and can be chosen only as a lucky attempt, while a Fortune opening shows. Any lucky number: a clean pass. None: the player does **not** get through; that stamina drops to 0 and they are Injured in that attribute (a CNT, −2 to its total until treated: Sleeping at the Village treats it; Sleeping at a wild Camp does not; the status line shows “Injured (AGI) – sleep at the Village to treat”). The opening is then spent; the player can try another option, or leave (swipe down), rest, and come back. These are the only options that can block the player; the racial ability always passes. The trial text says when an option is Lucky only and that resting first can shrink the gap |
@@ -199,7 +203,7 @@ Each exchange runs the same eight steps, in this order.
 
 1. **Enemy commits.** Work out the possible steps: the current pattern step (or a step whose `when` condition is true), a counter if the player repeated themselves, a flinch after a hard hit, or a guard on a spot the player keeps striking. Pick one, then its main move or a feint, with the seeded random function. Its action, weapon, and target are fixed before the player chooses.
 2. **Tells.** The caption is always one of the enemy's neutral captions (they don't depend on the move). If the player has a tell source, it works with the chance from the WIS + FAI comparison; Night lowers it a step; a working tell shows as a chip and a line in the narrative. Roll for a Fortune opening.
-3. **Player chooses.** Action (Pray, Attack, Block, Item, or an ability from the carousel), then a target (Head, Left, Right, Legs) for attacks and blocks. Tapping the Fortune star, then holding the action, attaches a lucky attempt when an opening is showing.
+3. **Player chooses.** Action (Pray, one of the weapon's attacks, Block, Item, or an ability from the carousel). Every attack and ability has its own target; only Block then asks for a spot (Head, Left, Right, Legs). Tapping the Fortune star, then holding the action, attaches a lucky attempt when an opening is showing.
 4. **Order by speed.** Basic Attacks use the weapon's speed and abilities their listed speed; Hindered and Speed advantage shift one tier. The slower side takes Disadvantage.
 5. **Attacks meet.** Two attacks meet when their speeds are equal or one step apart (Swift and Fair, Fair and Drawn); Swift and Drawn never meet. When they meet: opposite labels (Left vs Right) Clank, so neither deals damage and both become Off-Balance, but only if both are hard weapons (blades, hafts, gauntlets, shields); if either is a natural weapon (claws, bites, fists, hand wraps) there is no interaction. The same label (Left vs Left, Head vs Head, Legs vs Legs) starts a Clash with any weapons. Head vs Legs, or a side vs a height, don't interact. In the slice the sword (Fair) meets claws (Swift), bites (Fair), and the greatsword (Drawn); the dagger (Swift) meets claws and bites but never the greatsword.
 6. **Clash event**, if triggered. The enemy's Clash direction usually comes from the move it committed to (its Clash habit: werewolf 90%, barrow knight 94%); otherwise it goes one of the other three ways, by the seeded random function. No clue about the direction unless a tell source gives one (same rule and strengths, e.g. “In the Clash it won't go low, at your legs.”); the player picks a direction. The winner's attack lands with its normal damage (weapon, bonus attribute, Advantage or Disadvantage, armor, resist or weak, lucky multipliers, abilities such as Crusher, and traits such as Blessed), can't be Blocked, and can't miss; the loser's attack does not land. Then the winner gets Advantage on their next attack and the loser becomes Off-Balance. Same for the player and enemies.
@@ -224,8 +228,8 @@ Five events, two trials, two enemies, and one class are enough to exercise every
 
 | Item | Details |
 | --- | --- |
-| Sword | Approach, Fair, Medium, drains STR, sharp |
-| Dagger | Close, Swift, Light, drains AGI, sharp, throwable |
+| Sword | Approach, Medium, drains STR, sharp. Attacks: **Slash → Right** (main, Fair), Backhand → Left (Fair), Thrust → Head (Swift, 1 less damage), Low Cut → Legs (Fair) |
+| Dagger | Close, Light (each hit 1 less than the sword's), drains AGI, sharp, throwable. Attacks, all Swift: **Stab → Left** (main), Slash → Right, Jab → Head (1 less again), Hamstring → Legs |
 | Leather jerkin | Body, Light |
 | Herbal draught × 2 | Item action (Fair): +4 stamina to the lowest pool that has room to refill (stamina below its total, and a total above 0); +0 only when every pool is full |
 
@@ -254,51 +258,59 @@ Opening the crypt starts the Barrow Knight fight at once.
 
 **Enemies**
 
-Stamina, damage, feint, Clash habit, flinch, and guard chances were tuned by simulating 1,200 fights per enemy (`node tests/balance.js`). **Difficulty targets:** every fight is winnable but tense and costly, and losing is possible. For a Human Fighter with Plan B who has learned the patterns: wins in about 80–90% of fights; about 1 win in 4 is a scrape (under 20% of total stamina left); most wins cost 40–70% of total stamina; flawless wins (under 10% lost) less than 1 in 20; fights last about 10–20 exchanges. A player pressing random buttons should win sometimes (about 15–30%), usually barely.
+Stamina, damage, armor, feint, Clash habit, flinch, and guard chances were tuned by simulating 1,200 fights per enemy for each simulated player, starting both at full stamina and after a typical trial (`node tests/balance.js`). Enemy damage was lowered first; the race tables are unchanged.
 
-**Simulated results** (1,200 fights each; `node tests/balance.js 1200`):
+**Simulated players** (`tests/sim.js`), all a Human Fighter with Plan B:
 
-|  | Werewolf | Barrow Knight |
-| --- | --- | --- |
-| Learned player wins | 82% | 88% |
-| Winners usually keep | 38% of total stamina (middle half 19–62%) | 46% (middle half 27–65%) |
-| Scrapes (under 20% left) | 26% of wins | 19% of wins |
-| Wins costing 40–70% | 38% | 44% |
-| Flawless (under 10% lost) | 1% | 3% |
-| Fight length | 11 exchanges (middle half 9–13) | 19 exchanges (middle half 16–22) |
-| Clashes per fight (learned) | 3.4, player wins 90% | 6.4, player wins 94% |
-| Tells (learned player) | 5% of exchanges; it prays in 9% and is Focused in 7% | 13% of exchanges; prays in 21%, Focused in 22% |
-| Attacks that miss | 20%: 5% by chance, 15% situational | 25%: 4% by chance, 21% situational |
-| Enemy Blocks | about 1 exchange in 8 | about 1 in 6 |
-| Clanks | none (natural weapons) | about 1 in every 14 fights |
-| Random buttons win | 0% | 0% |
+- **Attentive player:** knows only what is on screen. It doesn't know the patterns, but watches every exchange: what the enemy did (the attacks it sees, and Blocks it runs into), which move tended to follow which, and whether the enemy seems to repeat itself every few moves; it uses any tell, avoids repeating itself, and tries each choice in its head with the real rules. It makes its best choice about 75% of the time, otherwise its second or third. In a Clash it pushes where their attacks met, unless it has seen the enemy go another way.
+- **New player:** doesn't know or study the patterns. It mostly attacks (the main attack half the time), sometimes Blocks (often where it was last hit), now and then prays, drinks a draught when a bar runs low, and tries an ability when its weapon can't reach.
+- **Random buttons:** presses any button it can, mostly on the page in front of it (page 1 70% of the time, page 2 20%, the abilities 10%); Block at a random spot.
+- **After a typical trial:** the cheapest Gorge option without the racial ability (Study the knots, WIS 6 against 7): WIS at 0 and Dazed.
+- For reference, an **expert** who knows every pattern and feint wins 100% against the werewolf and 88–95% against the knight.
 
-Known shortfalls: scrapes against the knight are 19% of wins (target about 1 in 4); fewer than half of wins cost 40–70% for either enemy (38% and 44%), so “most wins” is not met; the werewolf's 82% sits at the low edge of 80–90%.
+**Difficulty targets:** attentive player wins 75–85% (about 1 win in 4 a scrape, under 20% of total stamina left; flawless wins, under 10% lost, under 1 in 20); new player wins 35–55%; random buttons win 10–25%; fights last 10–20 exchanges. Clashes can be set up by choosing an attack, but shouldn't be an easy win.
 
-The random-button target (15–30%) is not met and can't be met by tuning numbers while the learned-player targets hold. A random presser spends about 70% of exchanges on Pray, Item, or a wrong Block while taking hits; even pressing only Attack at random spots wins about 2%, and a player who knows the rules but not the patterns wins about 1%. Weakening the werewolf until random play wins 12% made learned play win 100% with 26% flawless in about 7 exchanges; at 45% random wins, learned play was 36% flawless. Rule changes meant to help a random player more than a skilled one (a wrong-spot Block halving the hit, Pray also healing 2, no Off-Balance after a lost Clash) each left random wins near 0%. This needs a design decision: a lower target for random play, or a different measure (for example, a first-time player who hasn't learned the patterns).
+**Simulated results** (1,200 fights each; `node tests/balance.js 1200`), full stamina / after a typical trial:
 
 |  | Werewolf | Barrow Knight |
 | --- | --- | --- |
-| STR / AGI / WIS / FAI | 9 / 9 / 3 / 2 | 11 / 3 / 6 / 6 |
-| Damage bonus | +2 to every hit | +1 to every hit |
-| Clash habit (goes its pattern's Clash direction) | 90% | 94% |
-| Feint chance | 47% | 59% |
+| Attentive player wins | 89% / 74% (average 81%) | 88% / 79% (average 84%) |
+| Winners usually keep | 46% / 35% of total stamina | 54% / 45% |
+| Scrapes (under 20% left) | 16% / 22% of wins | 13% / 16% |
+| Flawless (under 10% lost) | 1% / 1% | 1% / 1% |
+| Fight length (attentive) | 11 / 12 exchanges | 9 / 9 exchanges (middle half 6–11) |
+| Clashes (attentive) | 1.5 / 1.7 per fight; it wins 50% | 1.0 / 0.9 per fight; it wins 40% |
+| New player wins | 41% / 25% (average 33%), 16–18 exchanges | 42% / 23% (average 32%), 14–16 exchanges |
+| Random buttons win | 18% / 11% (average 14%), 14–17 exchanges | 21% / 15% (average 18%), 13–15 exchanges |
+| Attacks that miss (attentive) | 10%: 5% by chance, 5% situational | 13%: 5% by chance, 9% situational |
+| Enemy Blocks | about 1 exchange in 6 | about 1 in 4 |
+| Clanks | none (natural weapons) | about 1 in every 2 fights |
+
+**Known shortfalls.** Starting after a trial costs about 6 stamina and the Dazed setback, which drops every player 9–18 points, so no single setting puts both starts inside the 10-point attentive band: the attentive player is above it at full stamina (88–89%) and the werewolf just below it after a trial (74%); averaged over the two starts it is inside (81–84%). The new player is inside at full stamina (41–42%) but below after a trial (23–25%; average 32–33%). Scrapes are a little under 1 in 4 (13–22%). Knight fights with the attentive player are a little short (about 9 exchanges); making them longer pushed the new player down further.
+
+|  | Werewolf | Barrow Knight |
+| --- | --- | --- |
+| STR / AGI / WIS / FAI | 7 / 6 / 3 / 2 | 5 / 4 / 3 / 3 |
+| Damage bonus | none | +1 to every hit |
+| Hits | Claws 2, Bite 3 | Greatsword 5, Shield Bash 3 |
+| Clash habit (goes its pattern's Clash direction) | 90% | 50% |
+| Feint chance | 20% | 25% |
 | Luck (for misses) | 6 | 6 |
-| WIS + FAI (for tells) | 3 + 2 = 5 | 6 + 6 = 12 |
+| WIS + FAI (for tells) | 3 + 2 = 5 | 3 + 3 = 6 |
 | Neutral captions | “The werewolf paces, watching you.” · “It circles, low and silent.” · “Its breath steams in the cold air.” · “It sways, claws flexing.” | “The knight stands still, blade ready.” · “Its visor gives nothing away.” · “Old armor creaks as it shifts its weight.” · “Dust drifts down around it.” |
-| Flinch | 50% after a hit of 3 or more | 30% after a hit of 3 or more (rare: its armor soaks most hits) |
-| Guard | 35% when you keep striking one spot | 20% when you keep striking one spot |
+| Flinch | 70% after a hit of 3 or more | 30% after a hit of 3 or more |
+| Guard | 60% when you strike one spot in 2 of your last 3 turns | 20% when you strike one spot in 2 of your last 3 turns |
 | Range | Close | Approach |
-| Weapons | Claws (Swift, Light, drains AGI); Bite (Fair, Medium, drains STR); both natural: they Clash but never Clank | Greatsword (Drawn, Heavy, drains STR); hard: it can Clank |
-| Armor | None | Heavy head and body, Medium legs |
+| Weapons | Claws (Swift, Light, drains AGI): Low Rake → Legs, Left Swipe → Left, Right Swipe → Right; Bite (Fair, Medium, drains STR): Bite → Head, Leg Bite → Legs; both natural: they Clash but never Clank | Greatsword (Drawn, Heavy, drains STR): Overhead → Head, Sweeping Cut → Right, Low Sweep → Legs; Shield (Fair, Light, drains STR): Shield Bash → Left; both hard: they can Clank |
+| Armor | None | Medium head, Light body and legs |
 | Weak / resist | — | Weak to FAI (×2) |
 | Line | “Grrrhh…” | “Turn back.” |
 
-In simulated play the werewolf Blocks in about 1 exchange in 8 (mostly flinching after a hard hit), and the barrow knight in about 1 in 6. A player who knows the patterns Clashes about 3 times per fight with the werewolf and 6 with the knight; Clanks happen only against the knight (sword against greatsword), about once in every 14 fights.
+In simulated play the werewolf Blocks in about 1 exchange in 6 (mostly flinching after a hard hit), and the barrow knight in about 1 in 4. Clanks happen only against the knight (a sword against its greatsword or shield on opposite sides), about once every two fights.
 
 **Enemy patterns** (steps loop in order; a `when` jumps to that step)
 
-Every step has a **main** move and one or two **feints**. The enemy makes the main move unless it feints (47% of the time for the werewolf, 59% for the knight, split evenly between a step's feints). Nothing on screen gives the move away: a player relies on knowing the pattern, plus any tell a source gives (“It's avoiding your legs” at werewolf step 1 means the feint, Claws → Left). Moves marked **Block** guard that spot: attack somewhere else.
+Every step has a **main** move and one or two **feints**. The enemy makes the main move unless it feints (20% of the time for the werewolf, 25% for the knight, split evenly between a step's feints). Nothing on screen gives the move away: a player relies on knowing the pattern, plus any tell a source gives (“It's avoiding your legs” at werewolf step 1 means the feint, Claws → Left). Moves marked **Block** guard that spot: attack somewhere else.
 
 | Enemy | Step | Main move | Feints |
 | --- | --- | --- | --- |
@@ -309,15 +321,15 @@ Every step has a **main** move and one or two **feints**. The enemy makes the ma
 | Werewolf | Below half stamina, once | Becomes Enraged: +1 damage, harder to read | — |
 | Werewolf | Flinch (after a hard hit) | **Block → the spot just hit** | Bite → Head |
 | Werewolf | Guard (you keep striking one spot) | **Block → that spot** | Claws → Legs |
-| Barrow Knight | 1 | Greatsword → Head | Greatsword → Left |
-| Barrow Knight | 2 | Greatsword → Right | Greatsword → Legs |
-| Barrow Knight | 3 (after it is Blocked) | Greatsword → Legs (it strikes back low) | **Block → Legs** |
-| Barrow Knight | 4 (the trick) | Greatsword → Legs | Greatsword → Head |
+| Barrow Knight | 1 | Shield Bash → Left | Greatsword → Head |
+| Barrow Knight | 2 | Greatsword → Legs | Greatsword → Right |
+| Barrow Knight | 3 (after it is Blocked) | **Block → Legs** | Greatsword → Legs (it strikes back low) |
+| Barrow Knight | 4 (the trick) | Greatsword → Head | Greatsword → Legs |
 | Barrow Knight | Flinch (after a hard hit) | **Block → the spot just hit** | Greatsword → Head |
 | Barrow Knight | Guard (you keep striking one spot) | **Block → that spot** | Greatsword → Head |
-| Any enemy | Counter (after the player repeats the same action and target two exchanges running) | Fastest weapon with Advantage, aimed at random (never at a target the player has been Blocking) | — |
+| Any enemy | Counter (after the player uses the same attack, or Blocks the same spot, two exchanges running) | Fastest weapon with Advantage, aimed at random (never at a target the player has been Blocking) | — |
 
-Both tricks are learnable: the werewolf's fourth step bites at the head where its claws usually go low, and the knight's every-fourth swing goes for the legs where its first goes for the head. Nothing on screen marks them, so only counting the steps gives them away.
+Both tricks are learnable: the werewolf's fourth step bites at the head where its claws usually go low, and the knight's fourth blow comes down on the head after its shield, a low swing, and (after a Block) a guarded leg. Nothing on screen marks them, so only counting the steps gives them away.
 
 ## Interface implementation
 
@@ -342,7 +354,7 @@ Build the screens to match the mockups exactly; this lists the parts and behavio
 | Lucky attempt (when an opening shows) | Tap the glowing Fortune star to arm it, then hold the action | Click the star (or press L), then hold the action |
 | Details (reserved) | Swipe up | — |
 
-**Carousel:** page 1 is Pray, Attack, Block, Item; abilities fill later pages four at a time in learning order, and the loop returns to page 1. Spent abilities stay in place, grayed out, showing their reset. Choosing Attack or Block turns the diamond into Head, Left, Right, Legs, and a choice commits only after the half-second hold (one setting, `HOLD_SECONDS` in `ui/settings.js`), so accidental taps and double clicks do nothing.
+**Carousel:** page 1 is Pray (up), the weapon's main attack (right, e.g. “Slash · Right · Fair”), Block (down), Item (left). Page 2 holds the weapon's other three attacks, each on the side it hits (Head up, Left left, Right right, Legs down). Abilities fill later pages four at a time in learning order, each on the side it hits where that side is free, and the loop returns to page 1. Every attack button shows where it hits and its speed; out of reach it says “can't reach” and is greyed out. Spent abilities stay in place, grayed out, showing their reset. Only Block turns the diamond into Head, Left, Right, Legs. A choice commits only after the half-second hold (one setting, `HOLD_SECONDS` in `ui/settings.js`), so accidental taps and double clicks do nothing.
 
 **Feedback**
 
@@ -355,7 +367,7 @@ Build the screens to match the mockups exactly; this lists the parts and behavio
 
 **The enemy in Graphic fights.** Each enemy is drawn as two layers: the fight background without the enemy (`<art>-bg@2x.png`) and the enemy alone on a transparent background (`<art>-sprite@2x.png`). `data/enemyArt.js` gives where the sprite sits on the 390 × 844 screen and its four zones (head, left, right, legs, as fractions of the sprite; left and right are the screen's, matching the Left and Right buttons). The combined pictures (`werewolf@2x.png`, `barrow-knight@2x.png`) stay for screens outside the fight. The Text display is unchanged.
 
-- **The enemy is the target.** While choosing where (Attack, Block, an attacking ability, or a Clash), the four zones are outlined in sky blue. Holding a target button fills its zone as the hold bar fills, and the player can also press and hold a zone directly to choose it (its button fills along).
+- **The enemy is the target.** Holding a part of the enemy strikes it there with the weapon's attack aimed at that spot. While choosing where to Block, or in a Clash, the four zones are outlined in sky blue and holding one chooses it. Holding an attack, Block, or Clash button fills the zone it aims at as the hold bar fills, and holding a zone fills its button.
 - **Results land on the zones:** damage floats up in red from the zone hit, “MISS” where an attack missed, and a shield mark with a sky-blue flash where the enemy Blocked.
 - **Tells show on the art as well as in the text:** a reverse tell dims its zone and labels it “safe”; a narrowing tell dims the two zones it rules out (an exact tell, the three).
 - **The fight reacts:** a hit flashes the enemy white, then it recoils away from the zone hit. A Clank throws sparks where the weapons meet and shakes the scene. A Clash flashes the whole screen before the CLASH prompt; afterwards the winner's hit shows on the loser's zone. When the enemy hits the player, the screen edge on that side flashes red (top for head, left, right, bottom for legs) with the damage beside it; a player's Block flashes that edge sky blue with a shield. The sprite darkens as the enemy's stamina drops; an Enraged werewolf pulses red and shakes slightly; a defeated enemy sinks and fades out before the fight closes.
@@ -396,12 +408,13 @@ Slice 1 is done when a new player can finish the loop on a phone without help, a
 - [ ] Enemies sometimes feint instead of their main move
 - [ ] Choosing anything takes a half-second hold, with the fill bar inside the button
 - [ ] Enemies Block: a Block on the spot you attack stops your hit; Blocks have their own clues; the werewolf Blocks now and then (mostly after a hard hit), the barrow knight more often, and both Block more where you keep striking
-- [ ] Repeating the same action and target two exchanges running draws a counter
+- [ ] Every attack and ability has its own target, shown on its button; each weapon covers all four spots (main attack on page 1, the other three on page 2, each on the side it hits); only Block asks where; out of reach shows “can't reach”
+- [ ] Repeating the same attack (or Blocking the same spot) two exchanges running draws a counter
 - [ ] Clank, Clash, Block, Pray, Item, Plan B or Crusher, and cooldowns all behave as specified
 - [ ] Overflow follows STR, AGI, WIS, FAI; defeat at all four pools empty
 - [ ] A Fortune opening appears, a lucky attempt rolls the right dice, and both outcomes apply
 - [ ] Attacks can miss: always when Off-Balance, out of reach, or against a target that shifted first; otherwise by a small chance from AGI stamina + Luck (about 1 in 15, never above 1 in 5; Enraged misses more); a successful lucky attempt never misses; misses show in the result line
-- [ ] Learning each enemy's pattern makes the fight noticeably easier on a second try. Every fight is winnable but tense and costly: a player who knows the patterns wins about 80–90% of fights, about 1 win in 4 is a scrape (under 20% stamina left), most wins cost 40–70% of stamina, flawless wins are rarer than 1 in 20, and a fight lasts about 10–20 exchanges
+- [ ] Paying attention pays: an attentive player (only what is on screen, best choice about 75% of the time) wins about 75–85% of fights, about 1 win in 4 a scrape, flawless wins rarer than 1 in 20; a new player who doesn't know the patterns wins 35–55%; random buttons win 10–25%; fights last about 10–20 exchanges; Clashes can be set up but aren't an easy win
 - [ ] Combat fatigue, Rest, and Sleep update stamina and traits correctly
 - [ ] Menu, character sheet, and inventory open from their buttons
 - [ ] The Display setting switches between Text and Graphic versions

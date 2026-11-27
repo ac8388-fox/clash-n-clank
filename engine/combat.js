@@ -34,7 +34,7 @@
 
 import { getEnemy } from '../data/enemies.js';
 import { getAbility } from '../data/abilities.js';
-import { getWeapon, WEAPONS, ARMOR, CONSUMABLES } from '../data/items.js';
+import { getWeapon, WEAPONS, ARMOR, CONSUMABLES, mainAttack, weaponAttack } from '../data/items.js';
 import { ABILITIES } from '../data/abilities.js';
 import { TRAITS, PRAY_TPTS } from '../data/traits.js';
 import {
@@ -480,9 +480,17 @@ export function beginExchange(character, combatIn) {
 export function availableActions(character, combat) {
   const P = clone(combat.player);
   const weapon = currentWeapon(character, P);
+  const enemy = getEnemy(combat.enemyId);
+  const reach = !!weapon && inReach(weapon, enemy.range);
+  // The weapon in hand's four attacks (main first); out of reach, they can't be chosen.
+  const attacks = weapon ? weapon.attacks.map(a => ({
+    id: a.id, name: a.name, target: a.target, speed: a.speed, damage: a.damage || 0, main: !!a.main,
+    enabled: reach, reach,
+  })) : [];
+  const main = attacks.find(a => a.main) || null;
   const page1 = [
     { id: 'pray',   name: 'Pray',   enabled: true },
-    { id: 'attack', name: 'Attack', enabled: !!weapon, weapon: weapon && weapon.name },
+    { id: 'attack', name: main ? main.name : 'Attack', enabled: !!main && reach, weapon: weapon && weapon.name, attack: main, reach },
     { id: 'block',  name: 'Block',  enabled: true },
     { id: 'item',   name: 'Item',   enabled: draughtCount(character) > 0, detail: `Herbal draught ×${draughtCount(character)}` },
   ];
@@ -490,9 +498,13 @@ export function availableActions(character, combat) {
     const a = getAbility(id);
     const cd = character.cooldowns[id] || 0;
     const winded = a.speed === 'Drawn' && hasTrait(character, 'winded');   // Winded: no Drawn actions
-    return { id, name: a.name, enabled: cd === 0 && !!weapon && !winded, cooldownLeft: cd, speed: a.speed, winded };
+    const target = a.target === 'main' ? (main && main.target) : a.target || null;
+    // Plan B switches weapons, so it stays usable out of reach (the hit misses, the switch happens).
+    const canReach = reach || a.effect === 'planB';
+    return { id, name: a.name, enabled: cd === 0 && !!weapon && !winded && canReach, cooldownLeft: cd, speed: a.speed, winded,
+             target, reach: canReach };
   });
-  return { page1, abilities, weapon: weapon && weapon.name };
+  return { page1, attacks, abilities, weapon: weapon && weapon.name, reach };
 }
 
 // ---------------------------------------------------------------------------
@@ -530,11 +542,24 @@ export function submitAction(characterIn, combatIn, choice) {
   }
   const isAttack = action === 'attack' || action === 'ability';
   const targeted = isAttack || action === 'block';
-  if (targeted && !TARGETS.includes(choice.target)) throw new Error('Choose Head, Left, Right, or Legs');
   if (action === 'item' && draughtCount(c) === 0) throw new Error('No items left');
 
   const weapon = currentWeapon(c, P);
   if (isAttack && !weapon) throw new Error('No usable weapon');
+
+  // Every attack has its own target: the weapon's attack (by attackId, or the
+  // one aimed at choice.target, or its main attack), or the ability's fixed
+  // target ('main' = the main attack's). Only Block asks where.
+  let attack = null;
+  if (action === 'attack') {
+    attack = weaponAttack(weapon, { attackId: choice.attackId, target: choice.attackId ? null : choice.target });
+    if (!attack) throw new Error('No such attack');
+    choice = { ...choice, attackId: attack.id, target: attack.target };
+  } else if (action === 'ability') {
+    const t = ability.target === 'main' ? mainAttack(weapon).target : ability.target;
+    if (t) choice = { ...choice, target: t };
+  }
+  if (targeted && !TARGETS.includes(choice.target)) throw new Error('Choose Head, Left, Right, or Legs');
 
   // Using an attribute: counts toward fatigue; at 0 stamina it wears Natural down.
   const attr = actionAttribute(action, { weapon, ability, item: action === 'item' ? CONSUMABLES.herbalDraught : null });
@@ -558,7 +583,7 @@ export function submitAction(characterIn, combatIn, choice) {
 
   // --- 4. Order by speed -----------------------------------------------------
   let pSpeed = null;
-  if (isAttack) pSpeed = SPEED_RANK[action === 'ability' ? ability.speed : weapon.speed];
+  if (isAttack) pSpeed = SPEED_RANK[action === 'ability' ? ability.speed : attack.speed];
   else if (action === 'pray') pSpeed = SPEED_RANK.Fair;
   else if (action === 'item') pSpeed = SPEED_RANK[CONSUMABLES.herbalDraught.speed];
   if (pSpeed !== null) {
@@ -633,6 +658,7 @@ export function submitAction(characterIn, combatIn, choice) {
         tell: ctell,
         tells: ctell ? [ctell.text] : [],
         abilityId: ability ? ability.id : null,
+        attackId: attack ? attack.id : null,
         lucky,
         // What each side's attack would do if it wins the Clash.
         playerTarget: choice.target, playerAttackMod, pSpeed, eSpeed,
@@ -660,7 +686,7 @@ export function submitAction(characterIn, combatIn, choice) {
     for (const a of group) {
       if (canceled.has(a.side)) continue;
       if (a.side === 'player' && !playerDown) {
-        resolvePlayer(ctx, { action, weapon, ability, target: choice.target, pSpeed, eSpeed,
+        resolvePlayer(ctx, { action, weapon, ability, attack, target: choice.target, pSpeed, eSpeed,
                              playerAttackMod, enemyBlockMod, enemyOffensive: mv.action === 'attack' });
       }
       if (a.side === 'enemy' && !enemyDown && mv.action === 'enrage') {
@@ -704,6 +730,7 @@ function resolvePlayer(ctx, o) {
       weapon: o.weapon, totals: attrTotals(ctx.c), modifier: o.playerAttackMod,
       armorWeight: enemy.armor[SLOT_FOR[o.target]], resistWeak: damageMultiplier(enemy, o.weapon.drains),
       abilityMultiplier: o.ability && o.ability.multiplier ? o.ability.multiplier : 1, luckyMultiplier: mult,
+      bonus: (o.attack && o.attack.damage) || 0,
     });
     let blocked = false;
     if (!o.clashWin && mv.action === 'block' && mv.target === o.target) {
@@ -908,6 +935,7 @@ export function submitClash(characterIn, combatIn, direction) {
     const mod = !shaken ? pc.playerAttackMod : pc.playerAttackMod === 'advantage' ? null : 'disadvantage';
     resolvePlayer(ctx, {
       action: ctx.ability ? 'ability' : 'attack', weapon, ability: ctx.ability, target: pc.playerTarget,
+      attack: pc.attackId ? weaponAttack(weapon, { attackId: pc.attackId }) : null,
       pSpeed: pc.pSpeed, eSpeed: pc.eSpeed, playerAttackMod: mod, clashWin: true,
     });
     cb.player.advantageNext = true;

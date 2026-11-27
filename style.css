@@ -245,7 +245,8 @@ button { font-family: inherit; color: var(--white); }
 
 /* Zones: sky-blue outlines while choosing where; hold one to choose it. */
 .foe .zone { position: absolute; box-sizing: border-box; }
-.foe.targeting .zone { pointer-events: auto; cursor: pointer; border: 2px solid var(--glow); touch-action: none; }
+.foe .zone.live { pointer-events: auto; cursor: pointer; touch-action: none; }
+.foe.targeting .zone { border: 2px solid var(--glow); }
 .foe .zone .fill { position: absolute; inset: 0; background: rgba(91, 200, 245, .45); transform: scaleX(0); transform-origin: left; }
 /* Tells: the zones it rules out are dimmed; a reverse tell marks its zone "safe". */
 .foe .zone.ruled { background: rgba(0, 0, 0, .55); }

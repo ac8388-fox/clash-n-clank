@@ -42,9 +42,9 @@ export const ENEMIES = {
     art: 'werewolf',
     range: 'Close',
     line: 'Grrrhh…',
-    attrs: { STR: 9, AGI: 9, WIS: 3, FAI: 2 },
-    damageBonus: 2,
-    feintChance: 0.47,
+    attrs: { STR: 7, AGI: 6, WIS: 3, FAI: 2 },
+    damageBonus: 0,
+    feintChance: 0.2,
     luck: 6,
     clashHabit: 0.9,
     neutralCaptions: [
@@ -54,8 +54,8 @@ export const ENEMIES = {
       'It sways, claws flexing.',
     ],
     hardHit: 3,
-    flinchChance: 0.5,
-    guardChance: 0.35,
+    flinchChance: 0.7,
+    guardChance: 0.6,
     weapons: ['claws', 'bite'],
     armor: { head: null, body: null, legs: null },
     resist: {},
@@ -100,11 +100,11 @@ export const ENEMIES = {
     art: 'barrow-knight',
     range: 'Approach',
     line: 'Turn back.',
-    attrs: { STR: 11, AGI: 3, WIS: 6, FAI: 6 },
+    attrs: { STR: 5, AGI: 4, WIS: 3, FAI: 3 },
     damageBonus: 1,
-    feintChance: 0.59,
+    feintChance: 0.25,
     luck: 6,
-    clashHabit: 0.94,
+    clashHabit: 0.5,
     neutralCaptions: [
       'The knight stands still, blade ready.',
       'Its visor gives nothing away.',
@@ -114,30 +114,32 @@ export const ENEMIES = {
     hardHit: 3,
     flinchChance: 0.3,
     guardChance: 0.2,
-    weapons: ['greatsword'],
-    armor: { head: 'Heavy', body: 'Heavy', legs: 'Medium' },
+    weapons: ['greatsword', 'shield'],
+    armor: { head: 'Medium', body: 'Light', legs: 'Light' },
     resist: {},
     weak: { FAI: 2 },
     flinch: { feints: [{ action: 'attack', weapon: 'greatsword', target: 'head', clash: 'head' }] },
     guard: { feints: [{ action: 'attack', weapon: 'greatsword', target: 'head', clash: 'head' }] },
     pattern: [
+      // It opens with its shield. Shield Bash: faster and lighter than the
+      // greatsword, and hard (it can Clank).
       { id: 'k1', when: 'default', variants: [
+        { id: 'k1-left', action: 'attack', weapon: 'shield', target: 'left', clash: 'left' },
         { id: 'k1-head', action: 'attack', weapon: 'greatsword', target: 'head', clash: 'head' },
-        { id: 'k1-left', action: 'attack', weapon: 'greatsword', target: 'left', clash: 'left' },
       ] },
       { id: 'k2', when: 'default', variants: [
-        { id: 'k2-right', action: 'attack', weapon: 'greatsword', target: 'right', clash: 'left' },
         { id: 'k2-legs', action: 'attack', weapon: 'greatsword', target: 'legs', clash: 'legs' },
+        { id: 'k2-right', action: 'attack', weapon: 'greatsword', target: 'right', clash: 'left' },
       ] },
-      // After it is Blocked it strikes back low (or, as its feint, guards its legs).
+      // After it is Blocked it guards its legs (or, as its feint, strikes back low).
       { id: 'k3', when: 'afterBlocked', variants: [
-        { id: 'k3-legs', action: 'attack', weapon: 'greatsword', target: 'legs', clash: 'legs' },
         { id: 'k3-block', action: 'block', target: 'legs' },
+        { id: 'k3-legs', action: 'attack', weapon: 'greatsword', target: 'legs', clash: 'legs' },
       ] },
-      // The trick: every fourth swing goes for your legs, where step 1 goes for your head.
+      // The trick: after two low or side blows, the fourth comes down on your head.
       { id: 'k4', when: 'default', variants: [
-        { id: 'k4-legs', action: 'attack', weapon: 'greatsword', target: 'legs', clash: 'legs' },
         { id: 'k4-head', action: 'attack', weapon: 'greatsword', target: 'head', clash: 'head' },
+        { id: 'k4-legs', action: 'attack', weapon: 'greatsword', target: 'legs', clash: 'legs' },
       ] },
     ],
     fortuneHints: [

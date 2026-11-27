@@ -232,9 +232,10 @@ export function applyResistWeak(damage, multiplier = 1) {
 
 // Full hit: weapon damage (× any ability multiplier), then Advantage or
 // Disadvantage, armor, resist or weak, then a lucky multiplier.
+// bonus: the attack's own damage change (Thrust and Jab −1); never below 1.
 export function computeHit({ weapon, totals, modifier = null, armorWeight = null,
-                             resistWeak = 1, abilityMultiplier = 1, luckyMultiplier = 1 }) {
-  let d = weaponDamage(weapon, totals);
+                             resistWeak = 1, abilityMultiplier = 1, luckyMultiplier = 1, bonus = 0 }) {
+  let d = Math.max(1, weaponDamage(weapon, totals) + bonus);
   if (abilityMultiplier !== 1) d = Math.ceil(d * abilityMultiplier);
   d = applyAttackModifier(d, modifier);
   d = applyArmor(d, armorWeight);

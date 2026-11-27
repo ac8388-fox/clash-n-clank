@@ -14,7 +14,7 @@ import { ENEMIES } from '../data/enemies.js';
 import { ARMOR } from '../data/items.js';
 import { ABILITIES } from '../data/abilities.js';
 import { practiceFighter, simulateFight, learnedPolicy, learnedClash, randomPolicy, randomClash, createRng } from './sim.js';
-import { summarize } from './balance.js';
+import { summarize, measure } from './balance.js';
 
 // Chance misses are switched off in most tests so damage can be checked
 // exactly (situational misses still apply). missTest runs with them on.
@@ -359,7 +359,8 @@ test('Enemy Block: while it blocks it isn’t attacking, so Pray gives two bless
 test('Enemy Block: when it is Off-Balance its Block only halves your hit', () => {
   const s = plain(force(act(fight(), { action: 'pray' }), 'w2-guard'));
   s.cb.enemy.conditions.push({ id: 'offBalance', until: s.cb.exchange });
-  eq(act(s, { action: 'attack', target: 'head' }).cb.enemy.stamina.STR, WOLF.STR - 2, 'sword 3, halved up to 2');
+  // Thrust (the sword's head attack) hits 1 less: 2, halved up to 1.
+  eq(act(s, { action: 'attack', target: 'head' }).cb.enemy.stamina.STR, WOLF.STR - 1, 'Thrust 2, halved up to 1');
 });
 test('Flinch: after a hard hit it may flinch, and its main move Blocks the spot just hit', () => {
   let s = act(fight(), { action: 'pray' });                 // w2: bite (Fair) vs sword (Fair)
@@ -568,7 +569,8 @@ test('Attacks meet: opposite sides Clank, same label Clashes, others don’t int
   eq(C.attacksMeet('left', 'head'), 'none');
 });
 // The barrow knight's step 2 (main: Greatsword → Right).
-const atKnightStep2 = () => act(fight('barrowKnight'), { action: 'pray' });
+// k2 with its feint, greatsword → Right (its main move there is greatsword → Legs).
+const atKnightStep2 = () => act(fight('barrowKnight'), { action: 'pray' }, 'k2-right');
 
 test('Attacks meet at equal speed or one step apart; Swift and Drawn never meet', () => {
   const base = { playerTarget: 'head', enemyTarget: 'head', playerWeapon: { id: 'sword' }, enemyWeapon: { id: 'greatsword' } };
@@ -613,9 +615,11 @@ test('Sword vs claws on the same spot: Clash (Fair and Swift are one step apart)
   const r = C.submitAction(fight().c, fight().cb, { action: 'attack', target: 'legs' });   // w1: claws → Legs
   ok(r.combat.pendingClash, 'Clash');
 });
-test('Sword vs greatsword on the same spot: Clash', () => {
-  const s = fight('barrowKnight');   // k1: greatsword → Head
-  ok(C.submitAction(s.c, s.cb, { action: 'attack', target: 'head' }).combat.pendingClash, 'Clash');
+test('Same spot, speeds within one step: Clash (Backhand vs Shield Bash); Thrust (Swift) vs greatsword (Drawn): no', () => {
+  const s = fight('barrowKnight', 'planB', 1); s.cb = C.withVariant(s.cb, 'k1-left');   // Shield Bash → Left (Fair)
+  ok(C.submitAction(s.c, s.cb, { action: 'attack', attackId: 'backhand' }).combat.pendingClash, 'Clash');
+  const k = fight('barrowKnight');                                                       // k1: greatsword → Head (Drawn)
+  ok(!C.submitAction(k.c, k.cb, { action: 'attack', attackId: 'thrust' }).combat.pendingClash, 'Swift and Drawn never meet');
 });
 test('Dagger vs greatsword: no interaction (Swift and Drawn never meet), and the dagger can’t reach it at Approach', () => {
   const s = plain(holdDagger(atKnightStep2()));
@@ -636,8 +640,8 @@ test('Off-Balance: your attacks miss for the next exchange, then it clears', () 
   eq(r.cb.player.conditions, [], 'cleared');
 });
 test('No interaction: dagger at Head vs claws at Legs, both hit', () => {
-  const r = act(holdDagger(fight()), { action: 'attack', target: 'head' });
-  eq(r.cb.enemy.stamina.AGI, WOLF.AGI - 2);
+  const r = act(holdDagger(fight()), { action: 'attack', target: 'head' });   // Jab: the dagger's 2, less 1
+  eq(r.cb.enemy.stamina.AGI, WOLF.AGI - 1);
   eq(r.c.attrs.AGI.stamina, 6 - CLAW);
 });
 
@@ -654,9 +658,9 @@ test('Clash: the same label at equal speed opens a Clash; nothing lands until a 
 test('Clash won: your attack lands with its normal damage, its attack does not', () => {
   let s = plain(act(fight(), { action: 'pray' }));   // w2: bite → Head (Fair); sword (Fair)
   const before = totalStamina(s.c);
-  s = act(s, { action: 'attack', target: 'head' });  // Clash
+  s = act(s, { action: 'attack', target: 'head' });  // Thrust (Swift) meets the bite (Fair): Clash
   const r = clash(s, 'head');
-  eq(r.cb.enemy.stamina.STR, WOLF.STR - 3, 'sword 2 + STR 8 ÷ 5 = 3, drained from its STR');
+  eq(r.cb.enemy.stamina.STR, WOLF.STR - 2, 'Thrust: sword 2 + STR 8 ÷ 5 = 3, less 1, drained from its STR');
   eq(totalStamina(r.c), before, 'its bite does not land');
   ok(r.lines.some(l => l.startsWith('Your sword bites its head.')), r.lines.join(' | '));
   eq(r.cb.stats.clashWins, 1);
@@ -686,11 +690,12 @@ missTest('Clash won: the winning hit cannot miss, even when every other attack w
   } finally { Object.assign(MISS, saved); }
 }));
 test('Clash won: damage-changing abilities still apply (Crusher against the knight’s helm)', () => {
-  const s = plain(fight('barrowKnight', 'crusher'));   // k1: greatsword → Head (Drawn); Crusher (Drawn)
-  const r1 = C.submitAction(s.c, s.cb, { action: 'ability', abilityId: 'crusher', target: 'head' });
+  const s = plain(fight('barrowKnight', 'crusher'));
+  s.cb = C.withVariant(s.cb, 'k1-head');               // its feint at k1: greatsword → Head (Drawn); Crusher (Drawn)
+  const r1 = C.submitAction(s.c, s.cb, { action: 'ability', abilityId: 'crusher' });
   ok(r1.combat.pendingClash, 'Clash');
   const r = C.submitClash(r1.character, r1.combat, r1.combat.pendingClash.enemyDir);
-  eq(r.combat.enemy.stamina.STR, KNIGHT.STR - 3, 'sword 3 × 1.5 = 5, Heavy helm −2');
+  eq(r.combat.enemy.stamina.STR, KNIGHT.STR - 4, 'sword 3 × 1.5 = 5, Medium helm −1');
   eq(totalStamina(r.character), totalStamina(s.c), 'its greatsword does not land');
   eq(r.character.cooldowns.crusher, 3, 'Crusher still goes on cooldown');
 });
@@ -699,7 +704,8 @@ test('Clash lost: its attack lands with its normal damage, yours does not', () =
   const before = totalStamina(s.c);
   s = act(s, { action: 'attack', target: 'head' });
   const r = clash(s, 'legs');
-  eq(before - totalStamina(r.c), BITE, 'its bite lands for its normal damage');
+  // Its bite (Fair) was slower than your Thrust (Swift): Disadvantage, as it would be without the Clash.
+  eq(before - totalStamina(r.c), half(BITE_BASE, WB), 'its bite lands for its normal damage');
   eq(r.cb.enemy.stamina, s.cb.enemy.stamina, 'your sword does not land');
   ok(r.lines.some(l => l.startsWith('Its bite snaps at your head.')), r.lines.join(' | '));
   eq(r.cb.stats.clashLosses, 1);
@@ -719,7 +725,7 @@ test('Clash lost: Blessed still softens its winning hit', () => {
   const before = totalStamina(s.c);
   s = act(s, { action: 'attack', target: 'head' });
   const r = clash(s, 'legs');
-  eq(before - totalStamina(r.c), Math.max(1, Math.floor(BITE * 0.75)));
+  eq(before - totalStamina(r.c), Math.max(1, Math.floor(half(BITE_BASE, WB) * 0.75)));
 });
 
 // --- 7. Resolve --------------------------------------------------------------------------
@@ -783,7 +789,7 @@ test('Item: the draught skips pools that are full or have a total of 0; +0 only 
   s.c.attrs.FAI.stamina = 1;                            // lowest, even if its claws land first
   const r = act(s, { action: 'item' });
   ok(r.lines.some(l => l.includes('+4 FAI')), r.lines.join(' | '));
-  const full = act(fight('barrowKnight'), { action: 'block', target: 'head' });   // blocked: on to k3
+  const full = act(fight('barrowKnight'), { action: 'block', target: 'left' });   // its Shield Bash blocked: on to k3
   eq(step(full), 'k3'); eq(totalStamina(full.c), totalStamina(fight('barrowKnight').c), 'still full');
   full.cb = C.withVariant(full.cb, 'k3-block');          // it guards this exchange: nothing hits first
   const r2 = act(full, { action: 'item' });
@@ -792,10 +798,10 @@ test('Item: the draught skips pools that are full or have a total of 0; +0 only 
 test('Crusher: +50% damage at Drawn speed; armor still applies', () => {
   let s = fight('barrowKnight', 'crusher');
   eq(step(s), 'k1');
-  s = act(s, { action: 'block', target: 'head' });   // blocked → jumps to k3 (Block → Legs)
+  s = act(s, { action: 'block', target: 'left' });   // its Shield Bash is blocked → jumps to k3 (Block → Legs)
   eq(step(s), 'k3');
-  // sword 3 × 1.5 = 5, Heavy helm −2 = 3
-  eq(act(s, { action: 'ability', abilityId: 'crusher', target: 'head' }).cb.enemy.stamina.STR, KNIGHT.STR - 3);
+  // Crusher comes down on the head: sword 3 × 1.5 = 5, Medium helm −1 = 4
+  eq(act(s, { action: 'ability', abilityId: 'crusher' }).cb.enemy.stamina.STR, KNIGHT.STR - 4);
 });
 test('Cooldowns: Plan B (Fair) is unavailable for 2 exchanges, Crusher (Drawn) for 3', () => {
   let s = act(fight(), { action: 'ability', abilityId: 'planB', target: 'head' });
@@ -805,23 +811,24 @@ test('Cooldowns: Plan B (Fair) is unavailable for 2 exchanges, Crusher (Drawn) f
   eq(avail, [false, false, true]);
   const used = act(fight(), { action: 'ability', abilityId: 'planB', target: 'head' });
   throws(() => C.submitAction(used.c, used.cb, { action: 'ability', abilityId: 'planB', target: 'head' }), 'refused while cooling down');
-  let k = act(fight('barrowKnight', 'crusher'), { action: 'ability', abilityId: 'crusher', target: 'legs' });
+  // Crusher always comes down on the head; at k2 the knight swings right, so no Clash.
+  let k = act(act(fight('barrowKnight', 'crusher'), { action: 'pray' }), { action: 'ability', abilityId: 'crusher' });
   const av2 = [];
   for (let i = 0; i < 4; i++) { av2.push(C.availableActions(k.c, k.cb).abilities[0].enabled); k = act(k, moves[i % 2]); }
   eq(av2, [false, false, false, true]);
 });
 test('Barrow Knight: Block → Legs (main action) stops an attack at the legs', () => {
-  const s = act(fight('barrowKnight'), { action: 'block', target: 'head' });
+  const s = act(fight('barrowKnight'), { action: 'block', target: 'left' });
   eq(step(s), 'k3');
   eq(act(s, { action: 'attack', target: 'legs' }).cb.enemy.stamina, s.cb.enemy.stamina);
 });
-test('Barrow Knight: the trick (step 4) looks like step 1 but its main swing goes for your legs', () => noHiding(() => {
-  let s = act(fight('barrowKnight'), { action: 'block', target: 'head' });  // k1 → k3
+test('Barrow Knight: the trick (step 4): after low and side blows, its main swing comes down on your head', () => noHiding(() => {
+  let s = act(fight('barrowKnight'), { action: 'block', target: 'left' });  // k1 → k3
   s = act(s, { action: 'pray' });                                          // k3 → k4
   eq(step(s), 'k4');
-  const k1 = ENEMIES.barrowKnight.pattern[0], k4 = ENEMIES.barrowKnight.pattern[3];
-  eq([k1.variants[0].target, k4.variants[0].target], ['head', 'legs'], 'only counting the swings gives it away');
-  eq(staminaOf(act(s, { action: 'block', target: 'legs' }).c), staminaOf(s.c));
+  const k = ENEMIES.barrowKnight.pattern;
+  eq(k.map(st => st.variants[0].target), ['left', 'legs', 'legs', 'head'], 'only counting the blows gives it away');
+  eq(staminaOf(act(s, { action: 'block', target: 'head' }).c), staminaOf(s.c));
 }));
 
 // --- Fortune and lucky attempts ----------------------------------------------------------
@@ -898,32 +905,33 @@ test('Same seed and same choices replay the same fight, feints included', () => 
 });
 
 // --- Balance (slow: run on a computer with node tests/run-node.js) ---------------------------
-// Targets (Build Spec → Enemies): a player who knows the patterns wins most fights
-// (about 80–90%), but wins are costly; flawless wins are rare; fights last
-// 10–20 exchanges; chance misses about 1 in 15; tells only from a source (Focused, via Pray).
+// Targets (Build Spec → Enemies), for a Human Fighter, at full stamina and after a
+// typical trial: an attentive player (knows only what is on screen, best choice
+// about 75% of the time) wins 75–85%, about 1 win in 4 a scrape, flawless under
+// 1 in 20; a new player wins 35–55%; random buttons win 10–25%; fights last
+// 10–20 exchanges. These checks average the two starts over 150 fights each and
+// leave room for that noise; the full check is node tests/balance.js.
 
 for (const enemyId of ['werewolf', 'barrowKnight']) {
-  slowTest(`Balance (${enemyId}): wins are likely but costly, flawless wins rare, misses uncommon`, () => {
+  slowTest(`Balance (${enemyId}): attentive players usually win, new players sometimes, random buttons now and then`, () => {
     const N = 150;
-    const L = [], R = [];
-    for (let seed = 1; seed <= N; seed++) {
-      L.push(simulateFight({ seed, enemyId, policy: learnedPolicy, clashPick: learnedClash }));
-      const rng = createRng(seed * 7919);
-      R.push(simulateFight({ seed, enemyId, policy: randomPolicy(rng), clashPick: randomClash(rng) }));
-    }
-    const l = summarize(L), r = summarize(R);
+    const avg = (who) => {
+      const a = measure(enemyId, who, 'full', N), b = measure(enemyId, who, 'after trial', N);
+      const m = {};
+      for (const k of Object.keys(a)) m[k] = (a[k] + b[k]) / 2;
+      return m;
+    };
+    const A = avg('attentive'), Nw = avg('new'), R = avg('random');
     const p = (x) => (100 * x).toFixed(0) + '%';
-    ok(l.winRate >= 0.72 && l.winRate <= 0.95, `learned wins ${p(l.winRate)} (aim 80–90%; full check: node tests/balance.js)`);
-    ok(l.leftMedian <= 0.65, `winners usually keep ${p(l.leftMedian)} (aim: lose 40–70%)`);
-    // Scrapes: about 1 win in 4 against the werewolf, about 1 in 5 against the knight
-    // (Build Spec → Enemies). These limits leave room for the noise of 150 fights.
-    ok(l.scrape >= 0.1, `scrapes ${p(l.scrape)} of wins (aim about 25%)`);
-    ok(l.flawless < 0.08, `flawless ${p(l.flawless)} of wins (aim under 5%)`);
-    ok(l.avgLen >= 9 && l.avgLen <= 20, `average ${l.avgLen.toFixed(1)} exchanges`);
-    ok(l.chanceMissRate >= 0.02 && l.chanceMissRate <= 0.1, `chance misses ${p(l.chanceMissRate)} of attacks (aim about 1 in 15)`);
-    ok(l.tellRate > 0 && l.tellRate <= l.focusedRate, `tells in ${p(l.tellRate)} of exchanges, only while Focused (${p(l.focusedRate)})`);
-    // Random buttons win almost never (aim 15–30%: a known shortfall, Build Spec → Enemies).
-    ok(r.winRate < l.winRate - 0.5, `learning helps: learned ${p(l.winRate)} vs random ${p(r.winRate)}`);
+    ok(A.winRate >= 0.72 && A.winRate <= 0.9, `attentive wins ${p(A.winRate)} (aim 75–85%)`);
+    ok(A.flawless < 0.06, `attentive flawless ${p(A.flawless)} of wins (aim under 5%)`);
+    ok(A.scrape >= 0.08, `attentive scrapes ${p(A.scrape)} of wins (aim about 25%)`);
+    ok(Nw.winRate >= 0.22 && Nw.winRate <= 0.6, `new player wins ${p(Nw.winRate)} (aim 35–55%)`);
+    ok(R.winRate >= 0.07 && R.winRate <= 0.28, `random buttons win ${p(R.winRate)} (aim 10–25%)`);
+    ok(A.winRate > Nw.winRate + 0.2 && Nw.winRate > R.winRate + 0.05, 'paying attention pays');
+    ok(A.avgLen >= 8 && Nw.avgLen <= 20 && R.avgLen <= 20, `fights last ${A.avgLen.toFixed(1)} / ${Nw.avgLen.toFixed(1)} / ${R.avgLen.toFixed(1)} exchanges`);
+    ok(A.clashWinShare < 0.7, `Clashes aren't an easy win: attentive wins ${p(A.clashWinShare)}`);
+    ok(A.chanceMissRate >= 0.02 && A.chanceMissRate <= 0.1, `chance misses ${p(A.chanceMissRate)} of attacks (aim about 1 in 15)`);
   });
 }
 
@@ -988,4 +996,65 @@ baseTest('Events: every exchange reports what happened where, matching the stami
   }
   for (const k of ['hit:player', 'hit:enemy', 'miss:player', 'block:enemy', 'block:player', 'clash:', 'clashResult:', 'clank:'])
     ok(seen.has(k), 'seen ' + k);
+});
+
+// --- Every attack has its own target ------------------------------------------------------------
+
+import { WEAPONS } from '../data/items.js';
+test('Every player weapon covers all four spots, one attack per direction, main attack first', () => {
+  for (const id of ['sword', 'dagger']) {
+    const w = WEAPONS[id];
+    eq(w.attacks.map(a => a.target).sort(), ['head', 'left', 'legs', 'right'], id);
+    eq(w.attacks.filter(a => a.main).length, 1, id + ' has one main attack');
+  }
+  eq(WEAPONS.sword.attacks.map(a => [a.name, a.target, a.speed, a.damage]),
+     [['Slash', 'right', 'Fair', 0], ['Backhand', 'left', 'Fair', 0], ['Thrust', 'head', 'Swift', -1], ['Low Cut', 'legs', 'Fair', 0]]);
+  eq(WEAPONS.dagger.attacks.map(a => [a.name, a.target, a.speed, a.damage]),
+     [['Stab', 'left', 'Swift', 0], ['Slash', 'right', 'Swift', 0], ['Jab', 'head', 'Swift', -1], ['Hamstring', 'legs', 'Swift', 0]]);
+});
+test('An attack needs no target: it hits its own spot', () => {
+  const s = plain(act(fight(), { action: 'pray' }, 'w2-guard'));   // it guards its head: nothing hits you first
+  const r = act(s, { action: 'attack', attackId: 'slash' });
+  ok(r.lines.some(l => l.startsWith('Your sword') && l.includes('its right side')), r.lines.join(' | '));
+  eq(r.cb.player.history.at(-1), { action: 'attack', target: 'right' });
+  eq(r.cb.enemy.stamina.STR, WOLF.STR - 3, 'Slash: the sword’s full 3');
+  const t = act(plain(fight()), { action: 'attack', attackId: 'thrust' });
+  eq(t.cb.enemy.stamina.STR, WOLF.STR - 2, 'Thrust: one less');
+});
+test('The dagger hits one less than the sword’s matching attack', () => {
+  const s = plain(holdDagger(fight()));
+  eq(act(s, { action: 'attack', attackId: 'slash' }).cb.enemy.stamina.AGI, WOLF.AGI - 2, 'dagger Slash 2 (sword Slash 3)');
+  eq(act(plain(holdDagger(fight())), { action: 'attack', attackId: 'jab' }).cb.enemy.stamina.AGI, WOLF.AGI - 1, 'Jab 1 (Thrust 2)');
+});
+test('Abilities have fixed targets: Plan B uses the main attack of the weapon in hand, Crusher the head', () => {
+  const p = act(plain(fight()), { action: 'ability', abilityId: 'planB' });
+  eq(p.cb.player.history.at(-1).target, 'right', 'sword in hand: Slash → Right');
+  const d = act(plain(holdDagger(fight())), { action: 'ability', abilityId: 'planB' });
+  eq(d.cb.player.history.at(-1).target, 'left', 'dagger in hand: Stab → Left');
+  const c = act(plain(fight('werewolf', 'crusher')), { action: 'ability', abilityId: 'crusher' });
+  eq(c.cb.player.history.at(-1).target, 'head');
+  eq(C.availableActions(fight().c, fight().cb).abilities[0].target, 'right');
+});
+test('Out of reach: the dagger’s attacks show "can’t reach" against the knight; Plan B still switches back', () => {
+  const s = holdDagger(atKnightStep2());                       // k2: greatsword → Right; Stab → Left doesn't meet it
+  const a = C.availableActions(s.c, s.cb);
+  ok(a.attacks.every(x => !x.enabled && !x.reach), 'all four greyed out');
+  eq(a.page1[1].enabled, false);
+  ok(a.abilities.find(x => x.id === 'planB').enabled, 'Plan B is still there');
+  const r = act(s, { action: 'ability', abilityId: 'planB' });
+  eq(C.availableActions(r.c, r.cb).weapon, 'Sword');
+});
+test('Repeating the same attack twice running draws a counter; guarding counts the same spot', () => {
+  let s = act(fight(), { action: 'pray' });                    // w2: bite → Head, then w3: claws → Right (no Clash at the legs)
+  s = act(s, { action: 'attack', attackId: 'lowCut' });
+  s = act(s, { action: 'attack', attackId: 'lowCut' });
+  ok(s.cb.current.options.some(o => o.step.when === 'counter' || o.step.id === 'counter'), 'counter: ' + s.cb.current.options.map(o => o.step.id).join(','));
+  eq(C.focusTarget([{ action: 'attack', target: 'legs' }, { action: 'block', target: 'head' }, { action: 'ability:crusher', target: 'legs' }]), 'legs', 'two different moves at the legs still count');
+});
+test('The knight’s Shield Bash: Left, Fair, hard (it can Clank with a sword)', () => {
+  eq(WEAPONS.shield.speed, 'Fair'); ok(!WEAPONS.shield.natural);
+  ok(ENEMIES.barrowKnight.pattern[0].variants.some(v => v.weapon === 'shield' && v.target === 'left'));
+  const s = fight('barrowKnight');                             // k1 main: Shield Bash → Left
+  const r = act(s, { action: 'attack', attackId: 'slash' });   // Slash → Right against its Left: opposite sides
+  ok(r.lines.some(l => l.startsWith('Clank!')), r.lines.join(' | '));
 });

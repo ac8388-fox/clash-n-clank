@@ -16,7 +16,9 @@
 //   dots: { n, i }, helper, corners: true, dice: [{ sides, value, lucky }]
 //   clash: { tells: [..] }, overlay: { kind: 'menu', items } | { kind: 'panel', html }
 //   toast
-//   enemy: { sprite, box, zones, health, enraged, targeting, ruledOut, safe, fx, falling }
+//   enemy: { sprite, box, zones, health, enraged, targeting, ruledOut, safe, fx, falling, zoneRun }
+//          zoneRun: { head | left | right | legs: fn } – holding that zone runs it
+//          (an attack aimed there, a Block there, or a Clash push)
 //          – Graphic fights only: the enemy as its own layer over the background
 //            (see enemyLayer below); fx: { id, events } plays once per id.
 
@@ -54,7 +56,8 @@ function enemyLayer(en, display) {
 
   const zones = Object.entries(en.zones).map(([z, [l, t, w, h]]) => {
     const cls = ['zone', en.ruledOut.includes(z) ? 'ruled' : '', blocks.has(z) ? 'blockflash' : ''].join(' ');
-    return `<div class="${cls}" data-zone="${z}" data-dir="${ZONE_DIR[z]}" aria-label="${z}" ` +
+    const live = en.zoneRun && en.zoneRun[z] ? ' live' : '';
+    return `<div class="${cls}${live}" data-zone="${z}" data-dir="${ZONE_DIR[z]}" aria-label="${z}" ` +
       `style="left:${pct(l)};top:${pct(t)};width:${pct(w)};height:${pct(h)}">` +
       `<span class="fill"></span>${en.safe === z ? '<span class="safe">safe</span>' : ''}</div>`;
   }).join('');
@@ -140,7 +143,7 @@ function nameLine(n) {
 function option(dir, o) {
   if (!o) return `<button class="opt ${dir} empty" data-dir="${dir}" disabled aria-hidden="true"></button>`;
   const cls = ['opt', dir, o.dashed ? 'dashed' : '', (o.label || '').length > 9 ? 'long' : ''].join(' ');
-  return `<button class="${cls}" data-dir="${dir}" ${o.enabled === false ? 'disabled' : ''} aria-label="${esc(o.label)}${o.sub ? ', ' + esc(o.sub) : ''}">` +
+  return `<button class="${cls}" data-dir="${dir}" ${o.zone ? `data-zone="${o.zone}"` : ''} ${o.enabled === false ? 'disabled' : ''} aria-label="${esc(o.label)}${o.sub ? ', ' + esc(o.sub) : ''}">` +
     (o.icon ? icon(o.icon, 38) : '') +
     `<span class="lbl">${esc(o.label)}</span>` + (o.sub ? `<span class="sub">${esc(o.sub)}</span>` : '') +
     `<span class="hold" aria-hidden="true"><span class="fill"></span></span></button>`;
@@ -207,21 +210,20 @@ export function render(root, view, display, handlers) {
     e.preventDefault(); e.stopPropagation(); handlers.tap(el.dataset.tap);
   }));
   root.querySelectorAll('[data-input]').forEach(el => el.addEventListener('input', () => handlers.input(el.dataset.input, el.value)));
-  // While choosing where (Attack, Block, Clash), the enemy's zones are targets too:
-  // holding a button fills its zone, and holding a zone fills its button.
+  // The enemy's zones are targets too: holding a part of the enemy strikes it with
+  // the attack aimed there (or Blocks there, or pushes the Clash that way).
+  // Holding a button fills the zone it aims at, and holding a zone fills its button.
   const holds = {};
-  const targeting = root.querySelector('.foe.targeting');
-  const zoneFill = (dir) => targeting && targeting.querySelector(`.zone[data-dir="${dir}"] .fill`);
-  const btnFill = (dir) => root.querySelector(`.opt[data-dir="${dir}"] .fill`);
+  const foe = root.querySelector('.foe');
+  const zoneFill = (zone) => foe && zone && foe.querySelector(`.zone[data-zone="${zone}"] .fill`);
+  const btnFill = (zone) => root.querySelector(`.opt[data-zone="${zone}"]:not([disabled]) .fill`);
   const follow = (el) => (f) => { if (el) el.style.transform = `scaleX(${f})`; };
   root.querySelectorAll('.opt').forEach(b => {
     if (b.classList.contains('empty')) return;
-    holds[b.dataset.dir] = attachHold(b, () => handlers.choose(b.dataset.dir), { onProgress: follow(zoneFill(b.dataset.dir)) });
+    holds[b.dataset.dir] = attachHold(b, () => handlers.choose(b.dataset.dir), { onProgress: follow(zoneFill(b.dataset.zone)) });
   });
-  if (targeting) targeting.querySelectorAll('.zone').forEach(z => {
-    const b = root.querySelector(`.opt[data-dir="${z.dataset.dir}"]`);
-    if (!b || b.disabled) return;
-    attachHold(z, () => handlers.choose(z.dataset.dir), { onProgress: follow(btnFill(z.dataset.dir)) });
+  if (foe) foe.querySelectorAll('.zone.live').forEach(z => {
+    attachHold(z, () => handlers.zone(z.dataset.zone), { onProgress: follow(btnFill(z.dataset.zone)) });
   });
   return holds;
 }
