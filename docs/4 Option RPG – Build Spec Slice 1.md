@@ -166,7 +166,7 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Armor | Light 0, Medium −1, Heavy −2 to hits on its slot; minimum 1 damage |
 | Resist / weak | Enemy multipliers on damage of that attribute (×0.5 or ×2), applied after armor |
 | Overflow | Damage beyond an empty pool moves to the leftmost pool with stamina: STR, AGI, WIS, FAI |
-| Empty stamina | While a pool is 0, each action using it lowers that attribute's Natural total by 1 |
+| Empty stamina | While a pool is 0, each action using it lowers that attribute's Natural total by 1, until the next Sleep gives it back (Rest doesn't). The character sheet shows it, e.g. “AGI −2 (until you sleep)” |
 | Defeat | All four pools at 0 |
 | Luck | \|STR − AGI\| + \|WIS − FAI\| on Natural + Class, plus race modifier and unique gear; never below race starting Luck |
 | Tells | None by default. Tells come only from a source: a trait (TPT, CPT, PPT), ability, or item whose data carries `tell: 'reverse' | 'narrow' | 'exact'` (`blocksTells` turns them off). The strongest source is used. Tells are always true: **reverse** rules out one spot (“It's avoiding your legs.”), **narrow** rules out two (“It's going for your head or your left side.”, or “It won't strike…” when the move isn't an attack), **exact** names the move. Slice sources: Focused (TPT from Pray) gives reverse tells for 3 exchanges; Dazed blocks all tells. No Fighter ability reads an opponent (Feint deceives; Bob and Weave predicts to dodge), so none is a source |
@@ -184,7 +184,7 @@ These are the formulas and starting numbers to code. Everything is deterministic
 | Lucky only | Short by 4 or more: the option says “Lucky only” (no dashed border) and can be chosen only as a lucky attempt, while a Fortune opening shows. Any lucky number: a clean pass. None: the player does **not** get through; that stamina drops to 0 and they are Injured in that attribute (a CNT, −2 to its total until treated: Sleeping at the Village treats it; Sleeping at a wild Camp does not; the status line shows “Injured (AGI) – sleep at the Village to treat”). The opening is then spent; the player can try another option, or leave (swipe down), rest, and come back. These are the only options that can block the player; the racial ability always passes. The trial text says when an option is Lucky only and that resting first can shrink the gap |
 | Lucky attempt in a trial | Any lucky number is a clean pass; none counts as the real gap, the same as without the dice (met: clean; 1–3 short: through, with the TNT; Lucky only: not through, Injured). In combat, a lucky attempt with no lucky number still gives the enemy a free attack and leaves you Off-Balance |
 | Combat fatigue | After a fight, each attribute's stamina drops by half the number of actions that used it, rounded up |
-| Action attributes | Pray FAI, Attack = the weapon's attribute, Block WIS, Item AGI, abilities their listed attribute |
+| Action attributes | Pray FAI, Attack = the weapon's attribute, Block WIS, abilities their listed attribute. An Item uses no attribute (no fatigue, and it never wears down an empty pool) unless that item says it does; the Item button stays on the left of the diamond |
 | Rest | +50% of each total to stamina, clears Rest-cleared TNTs, resets Rest abilities, takes one part of the day |
 | Sleep | Evening or Night only: full stamina, clears all TPTs and TNTs, resets everything, wakes in the Morning |
 | Travel | Each journey takes one part of the day; the long way round the Gorge takes two |
@@ -227,7 +227,7 @@ Five events, two trials, two enemies, and one class are enough to exercise every
 | Sword | Approach, Fair, Medium, drains STR, sharp |
 | Dagger | Close, Swift, Light, drains AGI, sharp, throwable |
 | Leather jerkin | Body, Light |
-| Herbal draught × 2 | Item action (Fair): +4 stamina to the lowest pool |
+| Herbal draught × 2 | Item action (Fair): +4 stamina to the lowest pool that has room to refill (stamina below its total, and a total above 0); +0 only when every pool is full |
 
 **World map**
 

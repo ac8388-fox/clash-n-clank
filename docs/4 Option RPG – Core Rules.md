@@ -23,6 +23,8 @@ Four attributes (STR, AGI, WIS, FAI) double as stamina, and Luck is calculated f
 | Down | Wisdom (WIS) | Wisdom option | Block |
 | Left | Agility (AGI) | Agility option | Item |
 
+The Item button sits on the left, but using an item costs no Agility (or any attribute) unless that item says it does.
+
 **Attribute layers**
 
 | Layer | Source | Counts for Luck | Pair caps apply |
@@ -45,7 +47,7 @@ Four attributes (STR, AGI, WIS, FAI) double as stamina, and Luck is calculated f
 - **Trials and events:** the gap is measured against the attribute's current stamina. Meeting the requirement is a clean pass. Falling a little short (1–3) still gets the player through, but exhausts the attribute attempted (its stamina drops to 0) and leaves a TNT. Falling 4 or more short is **Lucky only**: the option can be tried only as a lucky attempt. Any lucky number is a clean pass; none means the player does not get through, the attribute drops to 0, and they gain a CNT (Injured). These are the only options that can block the player; the racial ability always passes. Since the gap uses current stamina, resting first can shrink it. A trial screen can always be left, and the world never traps the player behind one: there is a way round, or a chance to rest and return.
 - **Combat damage:** every weapon and ability carries an attribute, and its hits drain the target's stamina in that attribute, applied as the hits land. If that stamina is already 0, or a hit is bigger than what remains, the excess goes to the leftmost pool that still has stamina, in the order STR, AGI, WIS, FAI, so Faith is always the last to fall. A character is defeated when all four stamina pools reach 0.
 - **Combat fatigue:** combat actions cost nothing in the moment. After the fight, stamina drops in proportion to the attributes the character actually used (a mostly-Faith fight drains Faith), on top of any damage taken.
-- **Empty stamina:** stamina is the current pool out of the attribute's total (12/36 means 12 stamina of a 36 total). While an attribute's stamina sits at 0, each action using it lowers that total by 1, and the stamina stays at 0. Lost points come off the Natural layer, so Luck recalculates (never below the race floor). Stamina refills through Rest, Sleep, Prayer, and items; the total only grows back through events, class levels, and permanent items. Choices after a fight (Rest, Sleep, Prayer, items) matter most.
+- **Empty stamina:** stamina is the current pool out of the attribute's total (12/36 means 12 stamina of a 36 total). While an attribute's stamina sits at 0, each action using it lowers that total by 1, and the stamina stays at 0. Lost points come off the Natural layer, so Luck recalculates (never below the race floor), and they come back at the next Sleep (not a Rest); the character sheet shows them, e.g. “AGI −2 (until you sleep)”. Using an item costs no attribute unless that item says it does. Stamina refills through Rest, Sleep, Prayer, and items; the total only grows back through events, class levels, and permanent items. Choices after a fight (Rest, Sleep, Prayer, items) matter most.
 
 **Keeping every ability useful**
 

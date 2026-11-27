@@ -284,10 +284,22 @@ export function isDefeated(stamina) {
 }
 
 // While a pool is 0, each action using it lowers that attribute's Natural
-// total by 1 (the stamina stays at 0).
+// total by 1 (the stamina stays at 0), until the next Sleep gives it back.
 export function useAttribute(character, attr) {
   const c = clone(character);
-  if (c.attrs[attr].stamina === 0 && c.attrs[attr].natural > 0) c.attrs[attr].natural -= 1;
+  if (attr && c.attrs[attr].stamina === 0 && c.attrs[attr].natural > 0) {
+    c.attrs[attr].natural -= 1;
+    c.attrs[attr].worn = (c.attrs[attr].worn || 0) + 1;     // given back at the next Sleep
+  }
+  return c;
+}
+
+// Natural points worn away on empty pools come back at the next Sleep.
+export function restoreWorn(character) {
+  const c = clone(character);
+  for (const k of ATTRS) {
+    if (c.attrs[k].worn) { c.attrs[k].natural += c.attrs[k].worn; c.attrs[k].worn = 0; }
+  }
   return c;
 }
 
@@ -306,18 +318,31 @@ export function lowestPool(character) {
   return best;
 }
 
+// The lowest pool that has room to refill (stamina below a total above 0),
+// for the herbal draught. null when every pool is full.
+export function lowestPoolWithRoom(character) {
+  let best = null;
+  for (const k of ATTRS) {
+    const total = attrTotal(character, k);
+    if (total <= 0 || character.attrs[k].stamina >= total) continue;
+    if (best === null || character.attrs[k].stamina < character.attrs[best].stamina) best = k;
+  }
+  return best;
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 
-// Pray FAI, Attack = the weapon's attribute, Block WIS, Item AGI, abilities
-// their listed attribute.
-export function actionAttribute(action, { weapon = null, ability = null } = {}) {
+// Pray FAI, Attack = the weapon's attribute, Block WIS, abilities their listed
+// attribute. An Item uses no attribute unless that item says so (item.drains);
+// null means nothing is used (no fatigue, no wearing down an empty pool).
+export function actionAttribute(action, { weapon = null, ability = null, item = null } = {}) {
   switch (action) {
     case 'pray': return 'FAI';
     case 'attack': return weapon.drains;
     case 'block': return 'WIS';
-    case 'item': return 'AGI';
+    case 'item': return (item && item.drains) || null;
     case 'ability': return ability.drains;
     default: throw new Error('Unknown action: ' + action);
   }
@@ -441,7 +466,7 @@ export function canSleep(world) {
 // resets everything, wakes in the Morning.
 export function sleep(character, world) {
   if (!canSleep(world)) return { ok: false, reason: 'You can only sleep in the Evening or at Night.', character, world };
-  const c = clone(character);
+  const c = restoreWorn(character);                       // worn Natural points come back first
   for (const k of ATTRS) c.attrs[k].stamina = attrTotal(c, k);
   c.traits = c.traits.filter(t => t.kind !== 'TPT' && t.kind !== 'TNT');
   c.racialReady = true;

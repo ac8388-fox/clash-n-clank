@@ -42,7 +42,7 @@ import {
   computeHit, blockResult, applyDamage, damageCharacter, isDefeated, staminaOf,
   tellWorkChance, readingLead, tellLevelAfterNight, TELL_LEVEL, TELL_NAME,
   useAttribute, actionAttribute, isPredictable, tickCooldowns, restoreStamina,
-  lowestPool, applyCombatFatigue, wearItem, isBroken, missChance, inReach,
+  lowestPool, lowestPoolWithRoom, applyCombatFatigue, wearItem, isBroken, missChance, inReach,
 } from './rules.js';
 import { createRng, pickDistinct } from './random.js';
 
@@ -537,9 +537,11 @@ export function submitAction(characterIn, combatIn, choice) {
   if (isAttack && !weapon) throw new Error('No usable weapon');
 
   // Using an attribute: counts toward fatigue; at 0 stamina it wears Natural down.
-  const attr = actionAttribute(action, { weapon, ability });
-  c = useAttribute(c, attr);
-  P.usage[attr] += 1;
+  const attr = actionAttribute(action, { weapon, ability, item: action === 'item' ? CONSUMABLES.herbalDraught : null });
+  if (attr) {                                // an Item uses no attribute unless it says so
+    c = useAttribute(c, attr);
+    P.usage[attr] += 1;
+  }
 
 
   // Lucky attempt: only when a Fortune opening is showing (not on a Block).
@@ -759,12 +761,14 @@ function resolvePlayer(ctx, o) {
 
   if (o.action === 'item') {
     const item = CONSUMABLES.herbalDraught;
-    const pool = lowestPool(ctx.c);
-    const before = ctx.c.attrs[pool].stamina;
-    ctx.c = restoreStamina(ctx.c, pool, item.effect.amount * mult);
+    // The lowest pool that has room to refill; +0 only when every pool is full.
+    const pool = lowestPoolWithRoom(ctx.c);
     const p = ctx.c.pack.find(x => x.itemId === 'herbalDraught');
     p.qty -= 1;
     if (p.qty <= 0) ctx.c.pack = ctx.c.pack.filter(x => x !== p);
+    if (!pool) { lines.push('You drink a herbal draught. +0: every bar is already full.'); return; }
+    const before = ctx.c.attrs[pool].stamina;
+    ctx.c = restoreStamina(ctx.c, pool, item.effect.amount * mult);
     lines.push(`You drink a herbal draught. +${ctx.c.attrs[pool].stamina - before} ${pool}.`);
   }
 }

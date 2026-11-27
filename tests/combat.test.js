@@ -771,6 +771,24 @@ test('Item: a herbal draught gives +4 to the lowest pool and is used up', () => 
   eq(C.availableActions(r.c, r.cb).page1[3].enabled, false);
   throws(() => C.submitAction(r.c, r.cb, { action: 'item' }));
 });
+test('Item: uses no attribute (no fatigue, no wearing down an empty AGI pool)', () => {
+  const s = fight(); s.c.attrs.AGI.stamina = 0; s.c.attrs.WIS.stamina = 1;
+  const r = act(s, { action: 'item' });
+  eq(r.c.attrs.AGI.natural, s.c.attrs.AGI.natural, 'AGI Natural unchanged');
+  eq(r.cb.player.usage, { STR: 0, AGI: 0, WIS: 0, FAI: 0 }, 'nothing counts toward fatigue');
+});
+test('Item: the draught skips pools that are full or have a total of 0; +0 only when every pool is full', () => {
+  const s = fight();
+  s.c.attrs.STR.natural = 0; s.c.attrs.STR.class = 0; s.c.attrs.STR.stamina = 0;   // a total of 0: no room
+  s.c.attrs.FAI.stamina = 1;                            // lowest, even if its claws land first
+  const r = act(s, { action: 'item' });
+  ok(r.lines.some(l => l.includes('+4 FAI')), r.lines.join(' | '));
+  const full = act(fight('barrowKnight'), { action: 'block', target: 'head' });   // blocked: on to k3
+  eq(step(full), 'k3'); eq(totalStamina(full.c), totalStamina(fight('barrowKnight').c), 'still full');
+  full.cb = C.withVariant(full.cb, 'k3-block');          // it guards this exchange: nothing hits first
+  const r2 = act(full, { action: 'item' });
+  ok(r2.lines.some(l => l.includes('+0: every bar is already full')), 'all full');
+});
 test('Crusher: +50% damage at Drawn speed; armor still applies', () => {
   let s = fight('barrowKnight', 'crusher');
   eq(step(s), 'k1');

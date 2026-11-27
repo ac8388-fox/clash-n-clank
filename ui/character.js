@@ -23,7 +23,8 @@ export function characterPanel(g) {
   const reading = g.combat ? `<h3>Reading</h3><p>Reading the ${esc(getEnemy(g.combat.enemyId).name.toLowerCase())}: ${esc(readingLabel(c, g.combat).label)}</p>` : '';
   return { kind: 'panel', html: `<h2>${esc(c.name)}</h2>
     <p>${esc(r.name)} · Fighter, Level ${c.classLevel} · ${esc(occ ? occ.name : '')} (Main, Level ${c.mainOccupation.level})</p>
-    <h3>Attributes</h3>${ATTRS.map(k => `<div class="row"><span>${ATTR_WORD[k]}</span><span>${c.attrs[k].stamina} / ${attrTotal(c, k)}</span></div>`).join('')}
+    <h3>Attributes</h3>${ATTRS.map(k => `<div class="row"><span>${ATTR_WORD[k]}</span><span>${c.attrs[k].stamina} / ${attrTotal(c, k)}</span></div>` +
+      (c.attrs[k].worn ? `<p class="tnt">${k} −${c.attrs[k].worn} (until you sleep) <span class="note">worn down acting on an empty bar</span></p>` : '')).join('')}
     <h3>Luck</h3><p>Luck ${luck} · lucky number ${c.luckyNumber} · dice ${luckyDice(luck).map(d => 'd' + d).join(', ')}</p>
     <h3>Abilities</h3><p>${c.abilities.map(id => esc(ABILITIES[id].name)).join(', ')} · ${esc(r.ability)} (racial, ${c.racialReady ? 'ready' : 'used: back after a Rest'})</p>
     ${reading}

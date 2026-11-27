@@ -140,6 +140,25 @@ test('Empty stamina: an action using a pool at 0 lowers its Natural total by 1',
   const d = R.useAttribute(human(), 'AGI');
   eq(d.attrs.AGI.natural, 6, 'no loss while stamina remains');
 });
+test('Empty stamina: the Natural loss lasts until the next Sleep, then comes back', () => {
+  let c = human(); c.attrs.AGI.stamina = 0;
+  c = R.useAttribute(R.useAttribute(c, 'AGI'), 'AGI');
+  eq(c.attrs.AGI.natural, 4); eq(c.attrs.AGI.worn, 2); eq(R.attrTotal(c, 'AGI'), 4);
+  const rested = R.rest(c, { timeOfDay: 'Morning', day: 1 }).character;
+  eq(rested.attrs.AGI.natural, 4, 'a Rest does not give it back');
+  const slept = R.sleep(c, { timeOfDay: 'Night', day: 1 }).character;
+  eq(slept.attrs.AGI.natural, 6); eq(slept.attrs.AGI.worn, 0);
+  eq(slept.attrs.AGI.stamina, 6, 'and the night fills the restored total');
+});
+test('Herbal draught target: the lowest pool with room to refill', () => {
+  const c = human();                                   // totals 8 / 6 / 6 / 6
+  eq(R.lowestPoolWithRoom(c), null, 'every pool full');
+  c.attrs.WIS.stamina = 2; c.attrs.FAI.stamina = 3;
+  eq(R.lowestPoolWithRoom(c), 'WIS');
+  c.attrs.AGI.natural = 0; c.attrs.AGI.class = 0; c.attrs.AGI.stamina = 0;
+  eq(R.attrTotal(c, 'AGI'), 0);
+  eq(R.lowestPoolWithRoom(c), 'WIS', 'a pool with a total of 0 has no room');
+});
 test('Empty stamina lowers Luck as Natural changes, but never below the race floor', () => {
   let c = S.createCharacter({ name: 'H', raceId: 'halfling', luckyNumber: 1, occupationId: 'thief' });
   c.attrs.AGI.stamina = 0;
@@ -314,12 +333,13 @@ test('Combat fatigue never takes stamina below 0', () => {
   const c = human(); c.attrs.FAI.stamina = 1;
   eq(R.applyCombatFatigue(c, { FAI: 6 }).attrs.FAI.stamina, 0);
 });
-test('Action attributes: Pray FAI, Attack = weapon, Block WIS, Item AGI, abilities their own', () => {
+test('Action attributes: Pray FAI, Attack = weapon, Block WIS, Item none (unless the item says), abilities their own', () => {
   eq(R.actionAttribute('pray'), 'FAI');
   eq(R.actionAttribute('attack', { weapon: WEAPONS.sword }), 'STR');
   eq(R.actionAttribute('attack', { weapon: WEAPONS.dagger }), 'AGI');
   eq(R.actionAttribute('block'), 'WIS');
-  eq(R.actionAttribute('item'), 'AGI');
+  eq(R.actionAttribute('item'), null);
+  eq(R.actionAttribute('item', { item: { drains: 'AGI' } }), 'AGI', 'an item that says it uses AGI');
   eq(R.actionAttribute('ability', { ability: { drains: 'STR' } }), 'STR');
 });
 
