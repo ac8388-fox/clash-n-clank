@@ -12,9 +12,9 @@ Each screen exists in all three folders:
 |---|---|
 | Explore.html | An event (the Gorge trial), with the menu open |
 | Crypt.html | The Sealed Crypt trial |
-| Main.html | Combat, carousel page 1 (Pray, Attack, Block, Item) |
-| Abilities.html | Combat, carousel page 2 (class abilities) |
-| Side.html | Combat, choosing an attack target, with the right button mid-hold |
+| Main.html | Combat, carousel page 1 (Pray, main attack, Block, Item) |
+| Abilities.html | Combat, carousel page 2 (the weapon's other attacks, each on the side it hits) |
+| Side.html | Combat, choosing where to Block, with the right button mid-hold |
 | Travel.html | Travel between events |
 
 Notes for building from these:
